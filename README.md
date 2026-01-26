@@ -1,5 +1,11 @@
 # CucumberAndApples
 
+[![CI](https://github.com/nycjv321/cucumber-and-apples/actions/workflows/ci.yml/badge.svg)](https://github.com/nycjv321/cucumber-and-apples/actions/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-Apple%20Platforms-blue)](https://github.com/nycjv321/cucumber-and-apples)
+[![Swift](https://img.shields.io/badge/swift-5.9%2B-orange)](https://swift.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Built with Claude](https://img.shields.io/badge/Built%20with-Claude-blueviolet)](https://claude.ai)
+
 A standalone Swift Cucumber/BDD testing framework with zero external dependencies. Parse Gherkin `.feature` files, register step definitions with regex patterns, and run scenarios — all integrated with XCTest.
 
 ## Installation
