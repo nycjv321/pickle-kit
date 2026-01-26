@@ -1,10 +1,10 @@
 # Release Process
 
-This document explains how CucumberAndApples's automated release process works.
+This document explains how PickleKit's automated release process works.
 
 ## Overview
 
-CucumberAndApples uses an automated CI/CD pipeline powered by:
+PickleKit uses an automated CI/CD pipeline powered by:
 - **GitHub Actions** for CI and release automation
 - **release-please** for automated version bumps and changelog generation
 - **Conventional Commits** for semantic versioning
@@ -127,7 +127,7 @@ The release workflow (`.github/workflows/release.yml`) runs after successful CI 
 Users reference releases in their `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/nycjv321/cucumber-and-apples.git", from: "0.1.0")
+.package(url: "https://github.com/nycjv321/pickle-kit.git", from: "0.1.0")
 ```
 
 Swift Package Manager resolves tags automatically, so each release-please tag makes a new version available to consumers.

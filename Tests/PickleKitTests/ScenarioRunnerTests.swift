@@ -1,5 +1,5 @@
 import XCTest
-@testable import CucumberAndApples
+@testable import PickleKit
 
 final class ScenarioRunnerTests: XCTestCase {
 

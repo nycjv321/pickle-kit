@@ -1,15 +1,15 @@
-# Claude Code Instructions for CucumberAndApples
+# Claude Code Instructions for PickleKit
 
 ## Project Overview
 
-CucumberAndApples is a standalone Swift Cucumber/BDD testing framework. It provides a Gherkin parser, step registry, scenario runner, and XCTest bridge with zero external dependencies.
+PickleKit is a standalone Swift Cucumber/BDD testing framework. It provides a Gherkin parser, step registry, scenario runner, and XCTest bridge with zero external dependencies.
 
 ## Architecture
 
 ### Package Structure
 
 ```
-Sources/CucumberAndApples/
+Sources/PickleKit/
 ├── AST/
 │   └── GherkinAST.swift          # All model types (Feature, Scenario, Step, etc.)
 ├── Parser/
@@ -61,7 +61,7 @@ swift test --filter ScenarioRunnerTests # Runner tests only
 ### Test Structure
 
 ```
-Tests/CucumberAndApplesTests/
+Tests/PickleKitTests/
 ├── ParserTests.swift           # Gherkin parsing: features, scenarios, steps, tables, doc strings, tags, errors
 ├── OutlineExpanderTests.swift  # Outline expansion: substitution, naming, tag combination, edge cases
 ├── StepRegistryTests.swift     # Pattern matching: regex captures, ambiguity, anchoring, data passthrough
@@ -182,6 +182,37 @@ swift build              # Debug build
 swift test               # Run tests
 swift build -c release   # Release build
 ```
+
+## Example App
+
+The `Example/TodoApp/` directory contains a macOS SwiftUI todo app demonstrating PickleKit with XCUITest.
+
+### Structure
+
+```
+Example/TodoApp/
+├── project.yml                    # xcodegen spec (generates .xcodeproj)
+├── Sources/TodoApp/               # SwiftUI app (TodoApp.swift, ContentView.swift, TodoItem.swift)
+└── UITests/
+    ├── Features/                  # 3 Gherkin feature files
+    └── TodoUITests.swift          # GherkinTestCase subclass + step definitions
+```
+
+### Running
+
+```bash
+cd Example/TodoApp
+xcodegen generate
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS'
+```
+
+### Key Patterns
+
+- **`nonisolated(unsafe) static var app: XCUIApplication!`** — XCUIApplication isn't Sendable, but StepHandler requires @Sendable closures. Safe because XCUITest runs sequentially.
+- **Index-based accessibility identifiers** (`todoText_0`, `deleteButton_1`) — deterministic IDs for ForEach with enumerated array.
+- **`waitForExistence(timeout: 5)`** — all element queries use this to avoid flakiness.
+- **Local package dependency** — `project.yml` references PickleKit via `path: ../..`.
+- **Tag filtering** — `tagFilter` override excludes `@wip`; `CUCUMBER_TAGS` env var for CLI filtering.
 
 ## Concurrency Notes
 

@@ -1,0 +1,53 @@
+name: TodoApp
+options:
+  bundleIdPrefix: com.picklekit.example
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.0"
+  minimumXcodeGenVersion: "2.35.0"
+
+packages:
+  PickleKit:
+    path: ../..
+
+targets:
+  TodoApp:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/TodoApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.picklekit.example.todoapp
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+
+  TodoAppUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+        excludes:
+          - "**/*.feature"
+    resources:
+      - path: UITests/Features
+        type: folder
+    dependencies:
+      - target: TodoApp
+      - package: PickleKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.picklekit.example.todoapp.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: ""
+        TEST_TARGET_NAME: TodoApp
+
+schemes:
+  TodoApp:
+    build:
+      targets:
+        TodoApp: all
+        TodoAppUITests: [test]
+    test:
+      targets:
+        - TodoAppUITests

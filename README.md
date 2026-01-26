@@ -1,7 +1,7 @@
-# CucumberAndApples
+# PickleKit
 
-[![CI](https://github.com/nycjv321/cucumber-and-apples/actions/workflows/ci.yml/badge.svg)](https://github.com/nycjv321/cucumber-and-apples/actions/workflows/ci.yml)
-[![Platform](https://img.shields.io/badge/platform-Apple%20Platforms-blue)](https://github.com/nycjv321/cucumber-and-apples)
+[![CI](https://github.com/nycjv321/pickle-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/nycjv321/pickle-kit/actions/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-Apple%20Platforms-blue)](https://github.com/nycjv321/pickle-kit)
 [![Swift](https://img.shields.io/badge/swift-5.9%2B-orange)](https://swift.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Built with Claude](https://img.shields.io/badge/Built%20with-Claude-blueviolet)](https://claude.ai)
@@ -10,16 +10,16 @@ A standalone Swift Cucumber/BDD testing framework with zero external dependencie
 
 ## Installation
 
-Add CucumberAndApples to your `Package.swift`:
+Add PickleKit to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/<user>/cucumber-and-apples.git", from: "0.1.0"),
+    .package(url: "https://github.com/<user>/pickle-kit.git", from: "0.1.0"),
 ],
 targets: [
     .testTarget(
         name: "MyTests",
-        dependencies: ["CucumberAndApples"],
+        dependencies: ["PickleKit"],
         resources: [.copy("Features")]
     ),
 ]
@@ -43,7 +43,7 @@ Feature: Calculator
 
 ```swift
 import XCTest
-import CucumberAndApples
+import PickleKit
 
 final class CalculatorTests: GherkinTestCase {
     override class var featureSubdirectory: String? { "Features" }
@@ -77,7 +77,7 @@ Each scenario appears as a separate test in Xcode's test navigator.
 
 ## Gherkin Support
 
-CucumberAndApples supports the core Gherkin syntax:
+PickleKit supports the core Gherkin syntax:
 
 ### Keywords
 
@@ -247,7 +247,7 @@ Environment variable tags are **merged** with any compile-time `tagFilter` overr
 You can use the parser and runner directly without `GherkinTestCase`:
 
 ```swift
-import CucumberAndApples
+import PickleKit
 
 // Parse
 let parser = GherkinParser()
@@ -274,7 +274,7 @@ print("Passed: \(result.passedCount), Failed: \(result.failedCount)")
 ## Architecture
 
 ```
-Sources/CucumberAndApples/
+Sources/PickleKit/
 ├── AST/                    # Feature, Scenario, Step, DataTable model types
 ├── Parser/                 # GherkinParser (state machine), OutlineExpander
 ├── Runner/                 # StepRegistry, ScenarioRunner, TagFilter
@@ -288,6 +288,16 @@ All types are `Sendable`. Step handlers are `async throws`.
 - Swift 5.9+
 - macOS 14+ / iOS 17+ / tvOS 17+ / watchOS 10+
 - XCTest bridge requires ObjC runtime (Apple platforms)
+
+## Example: TodoApp with XCUITest
+
+The [`Example/TodoApp`](Example/TodoApp) directory contains a complete macOS SwiftUI todo app that demonstrates PickleKit with XCUITest. It includes:
+
+- **3 feature files** covering CRUD, completion toggling, data tables, scenario outlines, and tag filtering
+- **Step definitions** that drive `XCUIApplication` via accessibility identifiers
+- **xcodegen** project spec (`project.yml`) — run `xcodegen generate` to create the Xcode project
+
+See [`Example/TodoApp/README.md`](Example/TodoApp/README.md) for setup and usage instructions.
 
 ## License
 

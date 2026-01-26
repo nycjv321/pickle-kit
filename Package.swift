@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "CucumberAndApples",
+    name: "PickleKit",
     platforms: [
         .macOS(.v14),
         .iOS(.v17),
@@ -10,18 +10,18 @@ let package = Package(
         .watchOS(.v10)
     ],
     products: [
-        .library(name: "CucumberAndApples", targets: ["CucumberAndApples"]),
+        .library(name: "PickleKit", targets: ["PickleKit"]),
     ],
     targets: [
         .target(
-            name: "CucumberAndApples",
+            name: "PickleKit",
             dependencies: [],
-            path: "Sources/CucumberAndApples"
+            path: "Sources/PickleKit"
         ),
         .testTarget(
-            name: "CucumberAndApplesTests",
-            dependencies: ["CucumberAndApples"],
-            path: "Tests/CucumberAndApplesTests",
+            name: "PickleKitTests",
+            dependencies: ["PickleKit"],
+            path: "Tests/PickleKitTests",
             resources: [.copy("Fixtures")]
         ),
     ]
