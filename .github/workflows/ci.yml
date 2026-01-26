@@ -40,7 +40,7 @@ jobs:
       - name: Run tests
         run: |
           set -o pipefail
-          swift test --enable-code-coverage 2>&1 | xcbeautify --report junit --junit-report-filename test-results.xml
+          swift test --enable-code-coverage 2>&1 | xcbeautify --report junit --report-path . --junit-report-filename test-results.xml
 
       - name: Generate coverage report
         if: always()
