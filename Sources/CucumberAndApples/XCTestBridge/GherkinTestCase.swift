@@ -93,7 +93,18 @@ open class GherkinTestCase: XCTestCase {
             return errorSuite
         }
 
-        let filter = tagFilter
+        let envFilter = TagFilter.fromEnvironment()
+        let filter: TagFilter?
+        switch (tagFilter, envFilter) {
+        case let (compileTime?, env?):
+            filter = compileTime.merging(env)
+        case let (compileTime?, nil):
+            filter = compileTime
+        case let (nil, env?):
+            filter = env
+        case (nil, nil):
+            filter = nil
+        }
         scenarioMap = [:]
 
         for feature in features {

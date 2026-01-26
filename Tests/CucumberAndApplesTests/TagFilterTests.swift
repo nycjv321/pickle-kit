@@ -76,4 +76,78 @@ final class TagFilterTests: XCTestCase {
         XCTAssertEqual(a, b)
         XCTAssertNotEqual(a, c)
     }
+
+    // MARK: - fromEnvironment
+
+    override func setUp() {
+        super.setUp()
+        unsetenv("CUCUMBER_TAGS")
+        unsetenv("CUCUMBER_EXCLUDE_TAGS")
+    }
+
+    override func tearDown() {
+        unsetenv("CUCUMBER_TAGS")
+        unsetenv("CUCUMBER_EXCLUDE_TAGS")
+        super.tearDown()
+    }
+
+    func testFromEnvironmentWithIncludeTags() {
+        setenv("CUCUMBER_TAGS", "smoke,critical", 1)
+
+        let filter = TagFilter.fromEnvironment()
+        XCTAssertNotNil(filter)
+        XCTAssertEqual(filter?.includeTags, ["smoke", "critical"])
+        XCTAssertEqual(filter?.excludeTags, [])
+    }
+
+    func testFromEnvironmentWithExcludeTags() {
+        setenv("CUCUMBER_EXCLUDE_TAGS", "wip,manual", 1)
+
+        let filter = TagFilter.fromEnvironment()
+        XCTAssertNotNil(filter)
+        XCTAssertEqual(filter?.includeTags, [])
+        XCTAssertEqual(filter?.excludeTags, ["wip", "manual"])
+    }
+
+    func testFromEnvironmentWithBoth() {
+        setenv("CUCUMBER_TAGS", "smoke,fast", 1)
+        setenv("CUCUMBER_EXCLUDE_TAGS", "wip,slow", 1)
+
+        let filter = TagFilter.fromEnvironment()
+        XCTAssertNotNil(filter)
+        XCTAssertEqual(filter?.includeTags, ["smoke", "fast"])
+        XCTAssertEqual(filter?.excludeTags, ["wip", "slow"])
+    }
+
+    func testFromEnvironmentReturnsNilWhenUnset() {
+        let filter = TagFilter.fromEnvironment()
+        XCTAssertNil(filter)
+    }
+
+    func testFromEnvironmentTrimsWhitespace() {
+        setenv("CUCUMBER_TAGS", " smoke , fast ", 1)
+
+        let filter = TagFilter.fromEnvironment()
+        XCTAssertNotNil(filter)
+        XCTAssertEqual(filter?.includeTags, ["smoke", "fast"])
+    }
+
+    // MARK: - merging
+
+    func testMergingCombinesSets() {
+        let a = TagFilter(includeTags: ["smoke"], excludeTags: ["wip"])
+        let b = TagFilter(includeTags: ["fast"], excludeTags: ["manual"])
+
+        let merged = a.merging(b)
+        XCTAssertEqual(merged.includeTags, ["smoke", "fast"])
+        XCTAssertEqual(merged.excludeTags, ["wip", "manual"])
+    }
+
+    func testMergingWithEmptyFilter() {
+        let original = TagFilter(includeTags: ["smoke"], excludeTags: ["wip"])
+        let empty = TagFilter()
+
+        let merged = original.merging(empty)
+        XCTAssertEqual(merged, original)
+    }
 }

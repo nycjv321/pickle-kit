@@ -197,6 +197,45 @@ final class SmokeTests: GherkinTestCase {
 
 Tags from the feature level and scenario level are combined.
 
+## Filtering Scenarios
+
+There are three ways to filter which scenarios run:
+
+### 1. Name-based filtering with `swift test --filter`
+
+Use Swift's built-in test filtering to match test names:
+
+```bash
+swift test --filter CalculatorTests
+swift test --filter test_Addition
+```
+
+### 2. Compile-time tag filtering with `tagFilter`
+
+Override `tagFilter` in your test class (shown above in [Tag Filtering](#tag-filtering)).
+
+### 3. CLI tag filtering with environment variables
+
+Filter scenarios at runtime without changing code:
+
+| Variable | Purpose | Format |
+|----------|---------|--------|
+| `CUCUMBER_TAGS` | Include only scenarios matching these tags | Comma-separated: `smoke,critical` |
+| `CUCUMBER_EXCLUDE_TAGS` | Exclude scenarios matching these tags | Comma-separated: `wip,manual` |
+
+```bash
+# Run only smoke-tagged scenarios
+CUCUMBER_TAGS=smoke swift test
+
+# Exclude work-in-progress and slow scenarios
+CUCUMBER_EXCLUDE_TAGS=wip,slow swift test
+
+# Combine both
+CUCUMBER_TAGS=smoke CUCUMBER_EXCLUDE_TAGS=wip swift test
+```
+
+Environment variable tags are **merged** with any compile-time `tagFilter` override. Both include and exclude sets are unioned.
+
 ## Programmatic Usage
 
 You can use the parser and runner directly without `GherkinTestCase`:

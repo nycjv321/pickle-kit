@@ -152,6 +152,12 @@ registry.given("pattern with (\\d+) captures") { match in
 
 let runner = ScenarioRunner(registry: registry)
 let result = try await runner.run(feature: expanded, tagFilter: TagFilter(excludeTags: ["wip"]))
+
+// CLI tag filtering via environment variables (merged with compile-time tagFilter)
+// CUCUMBER_TAGS=smoke,critical swift test
+// CUCUMBER_EXCLUDE_TAGS=wip,slow swift test
+let envFilter = TagFilter.fromEnvironment()        // reads CUCUMBER_TAGS / CUCUMBER_EXCLUDE_TAGS
+let merged = existingFilter.merging(envFilter!)     // unions include and exclude sets
 ```
 
 ## CI/CD
