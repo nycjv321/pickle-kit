@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  checks: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -40,19 +44,26 @@ jobs:
       - name: Run tests
         run: |
           set -o pipefail
-          swift test --enable-code-coverage 2>&1 | xcbeautify --report junit --report-path . --junit-report-filename test-results.xml
+          swift test --enable-code-coverage 2>&1 | \
+            xcbeautify --report junit --report-path .
+
+      - name: Verify test report
+        if: always()
+        run: |
+          echo "=== Checking for junit.xml ==="
+          ls -la junit.xml || echo "junit.xml not found!"
 
       - name: Generate coverage report
         if: always()
         run: |
-          BIN_PATH=$(swift build --show-bin-path)
-          XCTEST_PATH=$(find "$BIN_PATH" -name '*.xctest' -type d | head -1)
-          if [ -n "$XCTEST_PATH" ]; then
-            EXEC_PATH="$XCTEST_PATH/Contents/MacOS/$(basename "$XCTEST_PATH" .xctest)"
-            xcrun llvm-cov export \
-              "$EXEC_PATH" \
-              -instr-profile="$(swift test --show-codecov-path 2>/dev/null | sed 's/\.json$/\.profdata/' || echo '.build/debug/codecov/default.profdata')" \
-              -format=lcov > coverage.lcov 2>/dev/null || true
+          PROFDATA=$(find .build -name "default.profdata" 2>/dev/null | head -1)
+          if [ -n "$PROFDATA" ]; then
+            TEST_BINARY=$(find .build/debug -type f -perm +111 -name "*PackageTests" | head -1)
+            if [ -n "$TEST_BINARY" ]; then
+              xcrun llvm-cov export -format=lcov \
+                -instr-profile="$PROFDATA" \
+                "$TEST_BINARY" > coverage.lcov || true
+            fi
           fi
 
       - name: Upload test results
@@ -60,23 +71,28 @@ jobs:
         if: always()
         with:
           name: test-results
-          path: test-results.xml
+          path: |
+            junit.xml
+            coverage.lcov
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Publish test report
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: Test Results
-          path: test-results.xml
+          path: junit.xml
           reporter: java-junit
+          fail-on-error: false
 
       - name: Summary
         if: always()
         run: |
           echo "## Test Results" >> $GITHUB_STEP_SUMMARY
-          if [ -f test-results.xml ]; then
-            TESTS=$(grep -c 'testcase' test-results.xml || echo "0")
-            FAILURES=$(grep -c 'failure' test-results.xml || echo "0")
+          if [ -f junit.xml ]; then
+            TESTS=$(grep -c 'testcase' junit.xml || echo "0")
+            FAILURES=$(grep -c 'failure' junit.xml || echo "0")
             echo "- Tests: $TESTS" >> $GITHUB_STEP_SUMMARY
             echo "- Failures: $FAILURES" >> $GITHUB_STEP_SUMMARY
           fi
