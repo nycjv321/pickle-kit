@@ -164,8 +164,16 @@ let merged = existingFilter.merging(envFilter!)     // unions include and exclud
 
 ### GitHub Actions
 
-- **ci.yml** — Runs on push to `main`/`feature/*` and PRs to `main`. Tests with code coverage, release build validation.
+- **ci.yml** — Runs on push to `main`/`feature/*` and PRs to `main`. Tests with code coverage via xcbeautify, publishes JUnit report via dorny/test-reporter, then validates release build. Requires `permissions: checks: write` for test reporting.
 - **release.yml** — Triggered after successful CI on `main`. Uses release-please for changelog and version tagging.
+
+### Test Reporting
+
+CI generates `junit.xml` via `xcbeautify --report junit --report-path .` (not `--xunit-output`, which doesn't produce files on macOS). The report is published by `dorny/test-reporter@v1` with `fail-on-error: false`.
+
+### Release Process
+
+See [docs/RELEASE.md](docs/RELEASE.md) for full documentation on conventional commits, release-please, and troubleshooting.
 
 ### Running CI locally
 
