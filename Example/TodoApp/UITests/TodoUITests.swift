@@ -16,14 +16,17 @@ final class TodoUITests: GherkinTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        Self.app = XCUIApplication()
-        Self.app.launch()
+        if Self.app == nil {
+            Self.app = XCUIApplication()
+            Self.app.launch()
+        } else {
+            Self.app.activate()
+        }
     }
 
     override func tearDown() {
-        Self.app?.terminate()
-        Self.app = nil
         super.tearDown()
+        // Don't terminate — app is reused across scenarios
     }
 
     override func registerStepDefinitions() {
@@ -36,11 +39,14 @@ final class TodoUITests: GherkinTestCase {
 
         given("the todo list is empty") { _ in
             let app = TodoUITests.app!
+            let clearButton = app.buttons["clearAllButton"]
+            if clearButton.waitForExistence(timeout: 2) {
+                clearButton.click()
+            }
             let emptyState = app.staticTexts["emptyStateText"]
-            // The list should be empty on fresh launch
             XCTAssertTrue(
                 emptyState.waitForExistence(timeout: 5),
-                "Expected empty state on fresh launch"
+                "Expected empty state after clearing"
             )
         }
 

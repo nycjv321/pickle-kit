@@ -26,11 +26,9 @@ targets:
     type: bundle.ui-testing
     platform: macOS
     sources:
-      - path: UITests
-        excludes:
-          - "**/*.feature"
-    resources:
+      - path: UITests/TodoUITests.swift
       - path: UITests/Features
+        buildPhase: resources
         type: folder
     dependencies:
       - target: TodoApp
@@ -51,3 +49,10 @@ schemes:
     test:
       targets:
         - TodoAppUITests
+      environmentVariables:
+        - variable: PICKLE_REPORT
+          value: "1"
+          isEnabled: true
+        - variable: PICKLE_REPORT_PATH
+          value: "/tmp/pickle-report.html"
+          isEnabled: false

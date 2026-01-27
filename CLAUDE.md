@@ -15,6 +15,11 @@ Sources/PickleKit/
 ├── Parser/
 │   ├── GherkinParser.swift       # Line-by-line state machine Gherkin parser
 │   └── OutlineExpander.swift     # Scenario Outline → concrete Scenario expansion
+├── Report/
+│   ├── StepResult.swift          # StepStatus enum + StepResult per-step execution data
+│   ├── TestRunResult.swift       # Aggregated test run results with computed counts
+│   ├── HTMLReportGenerator.swift # Self-contained HTML report with inline CSS/JS
+│   └── ReportResultCollector.swift # Thread-safe result accumulator (OSAllocatedUnfairLock)
 ├── Runner/
 │   ├── StepRegistry.swift        # Regex pattern → async closure mapping
 │   ├── ScenarioRunner.swift      # Executes scenarios against registry
@@ -30,6 +35,7 @@ Sources/PickleKit/
 - **`StepRegistry` is instance-based** (not singleton) for testability
 - **`StepHandler` is `@Sendable (StepMatch) async throws -> Void`** — async/await compatible
 - **`GherkinTestCase` uses ObjC runtime** (`class_addMethod`, `unsafeBitCast`) to create dynamic test methods since `XCTestCase.init(selector:)` is unavailable in Swift
+- **Per-class scenario maps** — `GherkinTestCase` stores scenario data in a dictionary keyed by `ObjectIdentifier(self)` so multiple subclasses (and the base class itself when discovered by XCTest) don't overwrite each other's data
 - **`GherkinParser` is a line-by-line state machine** with states: idle → inFeature → inBackground/inScenario/inOutline/inExamples/inDocString
 - **Conditional compilation** — `GherkinTestCase` is wrapped in `#if canImport(XCTest) && canImport(ObjectiveC)`
 
@@ -47,27 +53,39 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 | `StepRegistry.swift` | StepMatch, StepHandler, StepRegistryError, StepRegistry |
 | `ScenarioRunner.swift` | ScenarioRunnerError, ScenarioResult, FeatureResult, ScenarioRunner |
 | `TagFilter.swift` | Include/exclude filtering on tag arrays |
-| `GherkinTestCase.swift` | XCTestCase subclass, dynamic test suite via ObjC runtime |
+| `GherkinTestCase.swift` | XCTestCase subclass, dynamic test suite via ObjC runtime, report integration |
+| `StepResult.swift` | StepStatus enum, StepResult per-step execution data |
+| `TestRunResult.swift` | Aggregated test run result with feature/scenario/step counts |
+| `HTMLReportGenerator.swift` | Self-contained HTML report generator with inline CSS/JS |
+| `ReportResultCollector.swift` | Thread-safe result accumulator using OSAllocatedUnfairLock |
+| `GherkinIntegrationTests.swift` | GherkinTestCase subclass running all fixture features (enables `PICKLE_REPORT=1 swift test`) |
 
 ## Testing
 
 ```bash
-swift test                              # Run all tests
-swift test --filter ParserTests         # Parser tests only
-swift test --filter StepRegistryTests   # Registry tests only
-swift test --filter ScenarioRunnerTests # Runner tests only
+swift test                                     # Run all tests
+swift test --filter ParserTests                # Parser tests only
+swift test --filter StepRegistryTests          # Registry tests only
+swift test --filter ScenarioRunnerTests        # Runner tests only
+swift test --filter StepResultTests            # Step result/timing tests
+swift test --filter HTMLReportGeneratorTests    # Report generation tests
+swift test --filter GherkinIntegrationTests    # Full pipeline integration tests
+PICKLE_REPORT=1 swift test                     # Run tests + generate HTML report
 ```
 
 ### Test Structure
 
 ```
 Tests/PickleKitTests/
-├── ParserTests.swift           # Gherkin parsing: features, scenarios, steps, tables, doc strings, tags, errors
-├── OutlineExpanderTests.swift  # Outline expansion: substitution, naming, tag combination, edge cases
-├── StepRegistryTests.swift     # Pattern matching: regex captures, ambiguity, anchoring, data passthrough
-├── ScenarioRunnerTests.swift   # Execution: passing/failing scenarios, backgrounds, tag filtering, captures
-├── TagFilterTests.swift        # Include/exclude logic, priority, edge cases
-└── Fixtures/                   # .feature files loaded via Bundle.module
+├── ParserTests.swift              # Gherkin parsing: features, scenarios, steps, tables, doc strings, tags, errors
+├── OutlineExpanderTests.swift     # Outline expansion: substitution, naming, tag combination, edge cases
+├── StepRegistryTests.swift        # Pattern matching: regex captures, ambiguity, anchoring, data passthrough
+├── ScenarioRunnerTests.swift      # Execution: passing/failing scenarios, backgrounds, tag filtering, captures
+├── TagFilterTests.swift           # Include/exclude logic, priority, edge cases
+├── StepResultTests.swift          # Step-level results: status, timing, tags, undefined/skipped, backward compat
+├── HTMLReportGeneratorTests.swift # HTML generation: structure, counts, CSS classes, escaping, collector, aggregations
+├── GherkinIntegrationTests.swift  # Full pipeline: GherkinTestCase subclass running all fixture features
+└── Fixtures/                      # .feature files loaded via Bundle.module
     ├── basic.feature
     ├── with_background.feature
     ├── with_outline.feature
@@ -160,6 +178,62 @@ let envFilter = TagFilter.fromEnvironment()        // reads CUCUMBER_TAGS / CUCU
 let merged = existingFilter.merging(envFilter!)     // unions include and exclude sets
 ```
 
+## HTML Report Generation
+
+PickleKit generates Cucumber-style HTML reports with step-level results, timing, and interactive filtering.
+
+### How It Works
+
+1. `ScenarioRunner.run()` captures per-step timing and builds `[StepResult]` arrays — each step gets `.passed`, `.failed`, `.undefined`, or `.skipped` status
+2. `GherkinTestCase.executeScenario()` records each `ScenarioResult` into a shared `ReportResultCollector` (when `reportEnabled`)
+3. Reports are written via two mechanisms: `class func tearDown()` (after each `GherkinTestCase` subclass finishes) and an `atexit` handler (process exit). The `tearDown` approach ensures reports work under `xcodebuild` where the test runner may be killed before `atexit` fires
+4. `HTMLReportGenerator.write(result:to:)` creates intermediate directories automatically — `build/report.html` works even if `build/` doesn't exist
+
+### Configuration
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PICKLE_REPORT` | *(unset = off)* | Set to any value to enable |
+| `PICKLE_REPORT_PATH` | `pickle-report.html` | Output file path (ineffective for sandboxed UI test runners) |
+
+```bash
+PICKLE_REPORT=1 swift test
+PICKLE_REPORT=1 PICKLE_REPORT_PATH=build/report.html swift test
+```
+
+Subclasses can override `reportEnabled` / `reportOutputPath` class properties for compile-time control.
+
+### Key Types
+
+| Type | Purpose |
+|------|---------|
+| `StepStatus` | Enum: `.passed`, `.failed`, `.skipped`, `.undefined` |
+| `StepResult` | Per-step data: keyword, text, status, duration, error, sourceLine |
+| `TestRunResult` | Aggregated results with computed counts for features/scenarios/steps |
+| `HTMLReportGenerator` | Generates self-contained HTML with inline CSS/JS |
+| `ReportResultCollector` | Thread-safe accumulator using `OSAllocatedUnfairLock` |
+
+### Enriched Result Types
+
+`ScenarioResult` and `FeatureResult` have additional fields (all with defaults for backward compatibility):
+
+- **ScenarioResult**: `tags: [String]`, `stepResults: [StepResult]`, `duration: TimeInterval`
+- **FeatureResult**: `tags: [String]`, `sourceFile: String?`, `duration: TimeInterval`, plus computed step counts (`totalStepCount`, `passedStepCount`, `failedStepCount`, `skippedStepCount`, `undefinedStepCount`)
+
+### Programmatic Usage
+
+```swift
+// Direct generation from known results
+let result = TestRunResult(featureResults: [...], startTime: start, endTime: Date())
+let generator = HTMLReportGenerator()
+try generator.write(result: result, to: "report.html")
+
+// Incremental collection
+let collector = ReportResultCollector()
+collector.record(scenarioResult: result, featureName: "Login", featureTags: ["auth"])
+let testRun = collector.buildTestRunResult()
+```
+
 ## CI/CD
 
 ### GitHub Actions
@@ -178,9 +252,11 @@ See [docs/RELEASE.md](docs/RELEASE.md) for full documentation on conventional co
 ### Running CI locally
 
 ```bash
-swift build              # Debug build
-swift test               # Run tests
-swift build -c release   # Release build
+swift build                                            # Debug build
+swift test                                             # Run tests
+swift build -c release                                 # Release build
+PICKLE_REPORT=1 swift test                             # Run tests + generate HTML report
+PICKLE_REPORT=1 PICKLE_REPORT_PATH=build/report.html swift test  # Custom report path
 ```
 
 ## Example App
@@ -205,6 +281,30 @@ cd Example/TodoApp
 xcodegen generate
 xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS'
 ```
+
+### HTML Reports with xcodebuild
+
+`xcodebuild` does **not** pass shell environment variables (like `PICKLE_REPORT=1`) to the test runner process. Use one of these approaches instead:
+
+1. **Subclass override** (most reliable): override `reportEnabled` / `reportOutputPath` in `TodoUITests.swift`
+2. **Scheme env vars**: `project.yml` includes `PICKLE_REPORT` and `PICKLE_REPORT_PATH` variables. Set `isEnabled: true`/`false` in `project.yml` and re-run `xcodegen generate`, or toggle in Xcode's scheme editor
+
+**Sandbox limitation:** UI test runners (`.xctrunner`) are sandboxed and cannot write to arbitrary paths. `PICKLE_REPORT_PATH` is ineffective in this context — the OS blocks all user-specified paths. PickleKit falls back to `NSTemporaryDirectory()` (the sandbox's temp dir). The actual output path is printed to stderr.
+
+**TodoApp sandbox report path:**
+```
+~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html
+```
+
+```bash
+# Open the report after running tests
+open ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html
+
+# Full sandbox cleanup
+rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
+```
+
+**Report writing mechanism:** Reports are written from both `class func tearDown()` (after each `GherkinTestCase` subclass finishes) and an `atexit` handler. The `class func tearDown()` ensures reports are generated even when `xcodebuild` terminates the test runner before `atexit` fires.
 
 ### Key Patterns
 

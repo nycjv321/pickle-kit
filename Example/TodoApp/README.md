@@ -75,11 +75,15 @@ This launches the TodoApp, runs all non-`@wip` scenarios (~11 scenarios), and re
 
 ### Run all UI tests from Xcode
 
+> **Reminder:** Run `xcodegen generate` first if you haven't already — the `.xcodeproj` is not checked in.
+
 1. Open `TodoApp.xcodeproj`
-2. Select the **TodoApp** scheme
+2. Select the **TodoApp** scheme in the toolbar
 3. Press **Cmd+U** to run all tests
 
-Each Gherkin scenario appears as a separate test in Xcode's test navigator (left sidebar, test icon). You can see pass/fail status per scenario.
+Each Gherkin scenario appears as a separate `test_<Scenario_Name>` method in Xcode's test navigator (left sidebar, test icon). You can see pass/fail status per scenario. There are currently 12 active scenarios (1 is excluded by the `@wip` tag).
+
+To run a single scenario from Xcode, click the diamond icon next to any test method in the test navigator, or right-click it and choose **Run**.
 
 ### Run a specific scenario
 
@@ -156,9 +160,9 @@ Example/TodoApp/
 3. At test suite load time, `GherkinTestCase` parses all `.feature` files from the `Features` folder
 4. Each scenario is expanded (Scenario Outlines become concrete scenarios) and filtered by tags
 5. Each surviving scenario becomes a dynamic XCTest method via ObjC runtime
-6. When a test runs, `setUp()` launches the app, `registerStepDefinitions()` registers step handlers, and the scenario's steps execute in order
+6. When a test runs, `setUp()` launches the app (first scenario) or activates it (subsequent scenarios), `registerStepDefinitions()` registers step handlers, and the scenario's steps execute in order
 7. Step handlers use `XCUIApplication` to interact with the app via accessibility identifiers
-8. `tearDown()` terminates the app, so each scenario starts fresh
+8. The `Background` step "the todo list is empty" clears all todos via the Clear All button, so each scenario starts from a clean state without relaunching the app
 
 ### Gherkin → Test mapping
 
@@ -189,6 +193,7 @@ The `ContentView` assigns identifiers to all interactive elements so XCUITest ca
 | `todoToggle_N` | Checkbox for todo at index N | `checkBoxes` |
 | `todoText_N` | Title text for todo at index N | `staticTexts` |
 | `deleteButton_N` | Trash button for todo at index N | `buttons` |
+| `clearAllButton` | Clear All button (visible when list non-empty) | `buttons` |
 
 Index-based identifiers (`_0`, `_1`, ...) shift when items are added or removed, matching the current array order.
 
@@ -269,15 +274,91 @@ when("I do something with \"([^\"]*)\"") { match in
 
 Use `given()`, `when()`, `then()` for keyword-specific steps, or `step()` for keyword-agnostic matching.
 
+## HTML Test Reports
+
+PickleKit can generate Cucumber-style HTML reports with step-level results and timing.
+
+### Report configuration by context
+
+| Context | How to enable | Report path |
+|---------|--------------|-------------|
+| `swift test` (pickle-kit root) | `PICKLE_REPORT=1 swift test` | CWD or `PICKLE_REPORT_PATH` |
+| `xcodebuild` / Xcode (TodoApp) | Scheme env var (already enabled) | Sandbox fallback only |
+
+The `project.yml` scheme has `PICKLE_REPORT` enabled and `PICKLE_REPORT_PATH` **disabled**. `PICKLE_REPORT_PATH` is disabled because sandboxed UI test runners (`.xctrunner` bundles) cannot write to user-specified paths — the OS blocks it regardless of what path you set. PickleKit automatically falls back to `NSTemporaryDirectory()` inside the sandbox container, so the path variable is unnecessary.
+
+To toggle `PICKLE_REPORT`, edit `project.yml` and set `isEnabled: true` or `isEnabled: false`, then re-run `xcodegen generate`. You can also toggle it in Xcode's scheme editor (Edit Scheme → Test → Arguments → Environment Variables).
+
+### Enable via subclass override
+
+Override the report properties directly in `TodoUITests.swift`:
+
+```swift
+override class var reportEnabled: Bool { true }
+override class var reportOutputPath: String { "pickle-report.html" }
+```
+
+This approach always works regardless of how the tests are invoked. Note that `reportOutputPath` will still be subject to sandbox restrictions when running as a UI test — PickleKit will fall back to the temp directory if the path is not writable.
+
+### Sandbox limitations
+
+UI test runners (`*.xctrunner`) are sandboxed by the OS and cannot write to arbitrary paths like `/tmp` or the project source directory. This is enforced at the OS level for all `.xctrunner` bundles and cannot be bypassed. When the configured path is not writable, PickleKit falls back to the sandbox's temp directory. The actual path is printed to stderr (visible in xcodebuild output).
+
+For this project, the report lands at:
+
+```
+~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html
+```
+
+Shell commands for working with the sandbox report:
+
+```bash
+# Open the report
+open ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html
+
+# Copy to current directory
+cp ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html .
+
+# Remove the report
+rm ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html
+
+# Remove all sandbox data (full cleanup)
+rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
+```
+
+**Post-test report copy tip** — chain `xcodebuild` with a copy command to get the report in your working directory:
+
+```bash
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' \
+  && cp ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html . \
+  && open pickle-report.html
+```
+
+### Report content
+
+The report is a self-contained HTML file with:
+- Summary header with feature, scenario, and step counts
+- Per-feature sections with collapsible scenarios
+- Per-step detail with keyword, text, timing, and error messages
+- Interactive expand/collapse and status filtering
+
+Failed scenarios are expanded by default.
+
 ## Key Design Patterns
 
 | Pattern | Why |
 |---------|-----|
 | `nonisolated(unsafe) static var app` | `XCUIApplication` isn't `Sendable`, but `StepHandler` requires `@Sendable`. Safe because XCUITest runs sequentially. |
 | `waitForExistence(timeout: 5)` on all queries | Prevents flaky tests from race conditions between UI updates and assertions. |
-| Fresh app launch per scenario | `setUp()` launches, `tearDown()` terminates — each scenario starts from a clean state. |
+| App reuse across scenarios | `setUp()` launches once, then activates. Clear All button resets state between scenarios for faster execution. |
 | Index-based identifiers (`todoText_0`) | Deterministic IDs from `ForEach(Array(todos.enumerated()))`. Shift with the array. |
 | Local package dependency (`path: ../..`) | `project.yml` references PickleKit from the repo root, no remote fetch needed. |
+
+## Performance Notes
+
+The test suite reuses the app process across scenarios instead of relaunching for each one. `setUp()` calls `launch()` only for the first scenario; subsequent scenarios call `activate()` to bring the existing process to the foreground. State is reset between scenarios by the "the todo list is empty" Background step, which taps the Clear All button to remove all todos.
+
+This avoids the overhead of `XCUIApplication.launch()` per scenario (~8-10s saved per scenario on typical hardware). Expected total run time is roughly 5-8 seconds per scenario vs ~13 seconds with a full relaunch.
 
 ## Troubleshooting
 

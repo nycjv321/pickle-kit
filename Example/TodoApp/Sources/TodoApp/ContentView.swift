@@ -64,6 +64,12 @@ struct ContentView: View {
                     .font(.caption)
                     .accessibilityIdentifier("todoCount")
                 Spacer()
+                if !todos.isEmpty {
+                    Button("Clear All") { todos.removeAll() }
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("clearAllButton")
+                }
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
