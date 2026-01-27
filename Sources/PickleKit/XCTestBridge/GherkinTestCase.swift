@@ -37,6 +37,18 @@ open class GherkinTestCase: XCTestCase {
     /// Optional tag filter. Override to include/exclude scenarios by tags.
     open class var tagFilter: TagFilter? { nil }
 
+    /// Whether HTML report generation is enabled. Reads `PICKLE_REPORT` env var.
+    /// Override in subclass for compile-time control.
+    open class var reportEnabled: Bool {
+        ProcessInfo.processInfo.environment["PICKLE_REPORT"] != nil
+    }
+
+    /// Output path for the HTML report. Reads `PICKLE_REPORT_PATH` env var.
+    /// Override in subclass for compile-time control.
+    open class var reportOutputPath: String {
+        ProcessInfo.processInfo.environment["PICKLE_REPORT_PATH"] ?? "pickle-report.html"
+    }
+
     /// Override to register step definitions before scenarios run.
     open func registerStepDefinitions() {
         // Subclasses override this
@@ -67,13 +79,77 @@ open class GherkinTestCase: XCTestCase {
         registry.step(pattern, handler: handler)
     }
 
+    // MARK: - Report Collection
+
+    /// Shared result collector for HTML report generation across all GherkinTestCase subclasses.
+    nonisolated(unsafe) private static var _resultCollector = ReportResultCollector()
+    nonisolated(unsafe) private static var _atexitRegistered = false
+
+    /// The shared result collector. Accessible for programmatic use.
+    public static var resultCollector: ReportResultCollector { _resultCollector }
+
+    /// Write the collected report to disk. Called from both `atexit` (for `swift test`)
+    /// and `class func tearDown()` (for `xcodebuild` where the process may be killed
+    /// before `atexit` handlers fire).
+    private static func writeReportIfNeeded() {
+        let result = _resultCollector.buildTestRunResult()
+        guard !result.featureResults.isEmpty else { return }
+        let rawPath = ProcessInfo.processInfo.environment["PICKLE_REPORT_PATH"] ?? "pickle-report.html"
+        // Resolve to absolute path so the output location is unambiguous,
+        // especially under xcodebuild where the working directory may differ.
+        let absolutePath: String
+        if rawPath.hasPrefix("/") {
+            absolutePath = rawPath
+        } else {
+            let cwd = FileManager.default.currentDirectoryPath
+            absolutePath = (cwd as NSString).appendingPathComponent(rawPath)
+        }
+        let generator = HTMLReportGenerator()
+        do {
+            try generator.write(result: result, to: absolutePath)
+            fputs("PickleKit: HTML report written to \(absolutePath)\n", stderr)
+        } catch {
+            // Fall back to the sandbox-writable temp directory (common when
+            // running UI tests via xcodebuild, where the runner is sandboxed).
+            let fallbackPath = (NSTemporaryDirectory() as NSString)
+                .appendingPathComponent((rawPath as NSString).lastPathComponent)
+            do {
+                try generator.write(result: result, to: fallbackPath)
+                fputs("PickleKit: HTML report written to \(fallbackPath)\n", stderr)
+            } catch {
+                fputs("PickleKit: Failed to write report: \(error.localizedDescription)\n", stderr)
+            }
+        }
+    }
+
+    private static func ensureAtexitRegistered() {
+        guard !_atexitRegistered else { return }
+        _atexitRegistered = true
+        atexit {
+            GherkinTestCase.writeReportIfNeeded()
+        }
+    }
+
+    /// Write an incremental report after each test class finishes.
+    /// This ensures reports are generated even when the test runner process
+    /// is terminated (e.g., by xcodebuild) before `atexit` handlers fire.
+    override open class func tearDown() {
+        if _atexitRegistered {
+            writeReportIfNeeded()
+        }
+        super.tearDown()
+    }
+
     // MARK: - Dynamic Test Suite
 
-    /// Parsed and expanded scenarios mapped by sanitized method name.
-    private static var scenarioMap: [String: (scenario: Scenario, background: Background?, feature: Feature)] = [:]
+    /// Parsed and expanded scenarios mapped by sanitized method name, keyed per class.
+    /// Each GherkinTestCase subclass gets its own scenario map so that multiple
+    /// subclasses (or the base class itself) don't overwrite each other's data.
+    private static var scenarioMaps: [ObjectIdentifier: [String: (scenario: Scenario, background: Background?, feature: Feature)]] = [:]
 
     override open class var defaultTestSuite: XCTestSuite {
         let suite = XCTestSuite(forTestCaseClass: self)
+        let classId = ObjectIdentifier(self)
 
         // Parse features
         let parser = GherkinParser()
@@ -89,7 +165,7 @@ open class GherkinTestCase: XCTestCase {
             if let testCase = makeTestCase(for: self, selector: sel) {
                 errorSuite.addTest(testCase)
             }
-            parseError = error
+            parseErrors[classId] = error
             return errorSuite
         }
 
@@ -105,7 +181,7 @@ open class GherkinTestCase: XCTestCase {
         case (nil, nil):
             filter = nil
         }
-        scenarioMap = [:]
+        scenarioMaps[classId] = [:]
 
         for feature in features {
             let expanded = expander.expand(feature)
@@ -124,7 +200,7 @@ open class GherkinTestCase: XCTestCase {
                 let methodName = sanitizeMethodName(scenario.name)
                 let selectorName = "test_\(methodName)"
 
-                scenarioMap[selectorName] = (scenario, expanded.background, feature)
+                scenarioMaps[classId]?[selectorName] = (scenario, expanded.background, feature)
 
                 // Create a dynamic test method
                 let sel = NSSelectorFromString(selectorName)
@@ -157,21 +233,29 @@ open class GherkinTestCase: XCTestCase {
 
     // MARK: - Error Reporting
 
-    private static var parseError: Error?
+    private static var parseErrors: [ObjectIdentifier: Error] = [:]
 
     @objc private func reportParseError() {
-        XCTFail("Failed to parse feature files: \(Self.parseError?.localizedDescription ?? "unknown error")")
+        let classId = ObjectIdentifier(type(of: self))
+        let error = Self.parseErrors[classId]
+        XCTFail("Failed to parse feature files: \(error?.localizedDescription ?? "unknown error")")
     }
 
     // MARK: - Scenario Execution
 
     private func executeScenario(named selectorName: String) {
-        guard let entry = Self.scenarioMap[selectorName] else {
+        let classId = ObjectIdentifier(type(of: self))
+        guard let entry = Self.scenarioMaps[classId]?[selectorName] else {
             XCTFail("No scenario found for \(selectorName)")
             return
         }
 
         let (scenario, background, feature) = entry
+        let reportingEnabled = type(of: self).reportEnabled
+
+        if reportingEnabled {
+            Self.ensureAtexitRegistered()
+        }
 
         // Register step definitions
         registry.reset()
@@ -188,6 +272,15 @@ open class GherkinTestCase: XCTestCase {
                 background: background,
                 feature: feature
             )
+
+            if reportingEnabled {
+                Self._resultCollector.record(
+                    scenarioResult: result,
+                    featureName: feature.name,
+                    featureTags: feature.tags,
+                    sourceFile: feature.sourceFile
+                )
+            }
 
             if !result.passed, let error = result.error {
                 // Extract source location info for better diagnostics

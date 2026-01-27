@@ -26,12 +26,26 @@ public struct ScenarioResult: Sendable {
     public let passed: Bool
     public let error: (any Error)?
     public let stepsExecuted: Int
+    public let tags: [String]
+    public let stepResults: [StepResult]
+    public let duration: TimeInterval
 
-    public init(scenarioName: String, passed: Bool, error: (any Error)? = nil, stepsExecuted: Int = 0) {
+    public init(
+        scenarioName: String,
+        passed: Bool,
+        error: (any Error)? = nil,
+        stepsExecuted: Int = 0,
+        tags: [String] = [],
+        stepResults: [StepResult] = [],
+        duration: TimeInterval = 0
+    ) {
         self.scenarioName = scenarioName
         self.passed = passed
         self.error = error
         self.stepsExecuted = stepsExecuted
+        self.tags = tags
+        self.stepResults = stepResults
+        self.duration = duration
     }
 }
 
@@ -40,10 +54,47 @@ public struct ScenarioResult: Sendable {
 public struct FeatureResult: Sendable {
     public let featureName: String
     public let scenarioResults: [ScenarioResult]
+    public let tags: [String]
+    public let sourceFile: String?
+    public let duration: TimeInterval
+
+    public init(
+        featureName: String,
+        scenarioResults: [ScenarioResult],
+        tags: [String] = [],
+        sourceFile: String? = nil,
+        duration: TimeInterval = 0
+    ) {
+        self.featureName = featureName
+        self.scenarioResults = scenarioResults
+        self.tags = tags
+        self.sourceFile = sourceFile
+        self.duration = duration
+    }
 
     public var passedCount: Int { scenarioResults.filter(\.passed).count }
     public var failedCount: Int { scenarioResults.filter { !$0.passed }.count }
     public var allPassed: Bool { scenarioResults.allSatisfy(\.passed) }
+
+    public var totalStepCount: Int {
+        scenarioResults.reduce(0) { $0 + $1.stepResults.count }
+    }
+
+    public var passedStepCount: Int {
+        scenarioResults.reduce(0) { $0 + $1.stepResults.filter { $0.status == .passed }.count }
+    }
+
+    public var failedStepCount: Int {
+        scenarioResults.reduce(0) { $0 + $1.stepResults.filter { $0.status == .failed }.count }
+    }
+
+    public var skippedStepCount: Int {
+        scenarioResults.reduce(0) { $0 + $1.stepResults.filter { $0.status == .skipped }.count }
+    }
+
+    public var undefinedStepCount: Int {
+        scenarioResults.reduce(0) { $0 + $1.stepResults.filter { $0.status == .undefined }.count }
+    }
 }
 
 // MARK: - Scenario Runner
@@ -66,33 +117,93 @@ public final class ScenarioRunner: Sendable {
         feature: Feature? = nil
     ) async throws -> ScenarioResult {
         var stepsExecuted = 0
+        var stepResults: [StepResult] = []
+        let allSteps = (background?.steps ?? []) + scenario.steps
+        let scenarioStart = ContinuousClock.now
 
         do {
             // Run background steps first
             if let background = background {
                 for step in background.steps {
+                    let stepStart = ContinuousClock.now
                     try await executeStep(step, feature: feature)
+                    let stepDuration = stepStart.duration(to: .now)
                     stepsExecuted += 1
+                    stepResults.append(StepResult(
+                        keyword: step.keyword.rawValue,
+                        text: step.text,
+                        status: .passed,
+                        duration: stepDuration.timeInterval,
+                        sourceLine: step.sourceLine
+                    ))
                 }
             }
 
             // Run scenario steps
             for step in scenario.steps {
+                let stepStart = ContinuousClock.now
                 try await executeStep(step, feature: feature)
+                let stepDuration = stepStart.duration(to: .now)
                 stepsExecuted += 1
+                stepResults.append(StepResult(
+                    keyword: step.keyword.rawValue,
+                    text: step.text,
+                    status: .passed,
+                    duration: stepDuration.timeInterval,
+                    sourceLine: step.sourceLine
+                ))
             }
 
+            let scenarioDuration = scenarioStart.duration(to: .now)
             return ScenarioResult(
                 scenarioName: scenario.name,
                 passed: true,
-                stepsExecuted: stepsExecuted
+                stepsExecuted: stepsExecuted,
+                tags: scenario.tags,
+                stepResults: stepResults,
+                duration: scenarioDuration.timeInterval
             )
         } catch {
+            // Mark the failing step
+            let failedStepIndex = stepsExecuted
+            if failedStepIndex < allSteps.count {
+                let failedStep = allSteps[failedStepIndex]
+                let isUndefined: Bool
+                if let runnerError = error as? ScenarioRunnerError,
+                   case .undefinedStep = runnerError {
+                    isUndefined = true
+                } else {
+                    isUndefined = false
+                }
+                stepResults.append(StepResult(
+                    keyword: failedStep.keyword.rawValue,
+                    text: failedStep.text,
+                    status: isUndefined ? .undefined : .failed,
+                    error: error.localizedDescription,
+                    sourceLine: failedStep.sourceLine
+                ))
+            }
+
+            // Mark remaining steps as skipped
+            for i in (failedStepIndex + 1)..<allSteps.count {
+                let skippedStep = allSteps[i]
+                stepResults.append(StepResult(
+                    keyword: skippedStep.keyword.rawValue,
+                    text: skippedStep.text,
+                    status: .skipped,
+                    sourceLine: skippedStep.sourceLine
+                ))
+            }
+
+            let scenarioDuration = scenarioStart.duration(to: .now)
             return ScenarioResult(
                 scenarioName: scenario.name,
                 passed: false,
                 error: error,
-                stepsExecuted: stepsExecuted
+                stepsExecuted: stepsExecuted,
+                tags: scenario.tags,
+                stepResults: stepResults,
+                duration: scenarioDuration.timeInterval
             )
         }
     }
@@ -103,6 +214,7 @@ public final class ScenarioRunner: Sendable {
     public func run(feature: Feature, tagFilter: TagFilter? = nil) async throws -> FeatureResult {
         let expander = OutlineExpander()
         let expandedFeature = expander.expand(feature)
+        let featureStart = ContinuousClock.now
 
         var results: [ScenarioResult] = []
 
@@ -125,9 +237,13 @@ public final class ScenarioRunner: Sendable {
             results.append(result)
         }
 
+        let featureDuration = featureStart.duration(to: .now)
         return FeatureResult(
             featureName: feature.name,
-            scenarioResults: results
+            scenarioResults: results,
+            tags: feature.tags,
+            sourceFile: feature.sourceFile,
+            duration: featureDuration.timeInterval
         )
     }
 
@@ -152,5 +268,15 @@ public final class ScenarioRunner: Sendable {
                 underlyingError: error
             )
         }
+    }
+}
+
+// MARK: - Duration Extension
+
+internal extension Duration {
+    /// Convert a Swift `Duration` to `TimeInterval` (seconds as Double).
+    var timeInterval: TimeInterval {
+        let (seconds, attoseconds) = components
+        return Double(seconds) + Double(attoseconds) * 1e-18
     }
 }
