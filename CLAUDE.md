@@ -63,7 +63,10 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 
 ## Testing
 
+See [docs/TESTING.md](docs/TESTING.md) for test design philosophy, the BDD rationale, test pyramid guidance, and UI test best practices.
+
 ```bash
+# PickleKit library tests
 swift test                                     # Run all tests
 swift test --filter ParserTests                # Parser tests only
 swift test --filter StepRegistryTests          # Registry tests only
@@ -72,6 +75,10 @@ swift test --filter StepResultTests            # Step result/timing tests
 swift test --filter HTMLReportGeneratorTests    # Report generation tests
 swift test --filter GherkinIntegrationTests    # Full pipeline integration tests
 PICKLE_REPORT=1 swift test                     # Run tests + generate HTML report
+
+# TodoApp tests (from Example/TodoApp/, requires xcodegen generate first)
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' -only-testing:TodoAppTests 2>&1 | xcbeautify      # Unit tests
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' -only-testing:TodoAppUITests 2>&1 | xcbeautify     # UI tests
 ```
 
 ### Test Structure
@@ -239,7 +246,12 @@ let testRun = collector.buildTestRunResult()
 
 ### GitHub Actions
 
-- **ci.yml** — Runs on push to `main`/`feature/*` and PRs to `main`. Tests with code coverage via xcbeautify, publishes JUnit report via dorny/test-reporter, then validates release build. Requires `permissions: checks: write` for test reporting.
+- **ci.yml** — Runs on push to `main`/`feature/*` and PRs to `main`. Three jobs:
+  - **unit-tests**: Runs PickleKit `swift test` (with coverage) and TodoApp `xcodebuild -only-testing:TodoAppTests`. Publishes JUnit report via dorny/test-reporter.
+  - **ui-tests**: Depends on `unit-tests`. Runs TodoApp `xcodebuild -only-testing:TodoAppUITests` (requires GUI session).
+  - **build**: Depends on `unit-tests`. Validates release build (`swift build -c release`).
+  - Dependency graph: `unit-tests` gates both `ui-tests` and `build` (which run in parallel).
+  - Requires `permissions: checks: write` for test reporting.
 - **release.yml** — Triggered after successful CI on `main`. Uses release-please for changelog and version tagging.
 
 ### Test Reporting
@@ -253,11 +265,18 @@ See [docs/RELEASE.md](docs/RELEASE.md) for full documentation on conventional co
 ### Running CI locally
 
 ```bash
+# PickleKit library
 swift build                                            # Debug build
 swift test                                             # Run tests
 swift build -c release                                 # Release build
 PICKLE_REPORT=1 swift test                             # Run tests + generate HTML report
 PICKLE_REPORT=1 PICKLE_REPORT_PATH=build/report.html swift test  # Custom report path
+
+# TodoApp (from Example/TodoApp/)
+xcodegen generate                                      # Generate .xcodeproj
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' -only-testing:TodoAppTests 2>&1 | xcbeautify      # Unit tests
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' -only-testing:TodoAppUITests 2>&1 | xcbeautify     # UI tests
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' 2>&1 | xcbeautify                                  # All tests
 ```
 
 ## Example App
@@ -269,7 +288,14 @@ The `Example/TodoApp/` directory contains a macOS SwiftUI todo app demonstrating
 ```
 Example/TodoApp/
 ├── project.yml                    # xcodegen spec (generates .xcodeproj)
-├── Sources/TodoApp/               # SwiftUI app (TodoApp.swift, ContentView.swift, TodoItem.swift)
+├── Sources/TodoApp/               # SwiftUI app
+│   ├── TodoApp.swift              # @main entry, Window scene, onOpenURL handler
+│   ├── ContentView.swift          # Todo list UI with accessibility identifiers
+│   ├── TodoItem.swift             # Identifiable model struct
+│   ├── TodoStore.swift            # @Observable store: add, remove, update, clear, toggle
+│   └── Info.plist                 # App configuration (URL scheme: todoapp://)
+├── Tests/
+│   └── TodoStoreTests.swift       # Unit tests for TodoStore (no UI dependency)
 └── UITests/
     ├── Features/                  # 3 Gherkin feature files
     └── TodoUITests.swift          # GherkinTestCase subclass + step definitions
@@ -280,7 +306,9 @@ Example/TodoApp/
 ```bash
 cd Example/TodoApp
 xcodegen generate
-xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' 2>&1 | xcbeautify
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' 2>&1 | xcbeautify              # All tests
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' -only-testing:TodoAppTests 2>&1 | xcbeautify       # Unit tests only
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' -only-testing:TodoAppUITests 2>&1 | xcbeautify     # UI tests only
 ```
 
 ### HTML Reports with xcodebuild
@@ -309,6 +337,9 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 
 ### Key Patterns
 
+- **`@Observable TodoStore`** — Extracted store for testability. `@State` in `App`, plain `var` in `ContentView`. Enables `TodoStoreTests` without UI.
+- **`Window` instead of `WindowGroup`** — Prevents duplicate windows from URL handling. `WindowGroup` creates a new window per `onOpenURL` event.
+- **`todoapp://seed` URL scheme** — Bypasses UI for fast, deterministic test setup. `onOpenURL` handler calls `store.clear()` + `store.add(titles:)` from JSON query parameter.
 - **`nonisolated(unsafe) static var app: XCUIApplication!`** — XCUIApplication isn't Sendable, but StepHandler requires @Sendable closures. Safe because XCUITest runs sequentially.
 - **App reuse across scenarios** — `setUp()` launches only once (`app == nil`), then reuses via `activate()`. Each scenario starts with a clean state via the "the todo list is empty" background step (clicks "Clear All").
 - **Index-based accessibility identifiers** (`todoText_0`, `deleteButton_1`, `editButton_0`, `editTextField_0`) — deterministic IDs for ForEach with enumerated array.

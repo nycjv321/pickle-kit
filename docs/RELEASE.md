@@ -85,27 +85,48 @@ The CI workflow (`.github/workflows/ci.yml`) runs on:
 - Pushes to `feature/*` branches
 - Pull requests targeting `main`
 
+### Pipeline Diagram
+
+```
+unit-tests ──┬──> ui-tests
+             └──> build
+```
+
+Both `ui-tests` and `build` depend on `unit-tests` passing first. `ui-tests` and `build` run in parallel.
+
 ### Jobs
 
-#### Test Job
+#### Unit Tests Job (`unit-tests`)
 
 Runs on `macos-14`:
 1. Checkout code
 2. Setup Xcode (latest stable)
-3. Install xcbeautify
+3. Install xcbeautify and xcodegen
 4. Cache and resolve SPM dependencies
-5. Run tests with code coverage
-6. Generate JUnit test report via xcbeautify
-7. Generate LCOV coverage report
-8. Upload test results artifact (retained 7 days)
-9. Publish test report via dorny/test-reporter
+5. Run PickleKit library tests (`swift test`) with code coverage
+6. Generate TodoApp project (`xcodegen generate`)
+7. Run TodoApp unit tests (`xcodebuild -only-testing:TodoAppTests`)
+8. Generate JUnit test report via xcbeautify
+9. Generate LCOV coverage report
+10. Upload test results artifact (retained 7 days)
+11. Publish test report via dorny/test-reporter
 
-#### Build Job
+#### UI Tests Job (`ui-tests`)
 
-Runs after tests pass:
+Depends on `unit-tests`. Runs on `macos-14` (requires a GUI session):
 1. Checkout code
 2. Setup Xcode (latest stable)
-3. Build in release configuration (`swift build -c release`)
+3. Install xcbeautify and xcodegen
+4. Generate TodoApp project (`xcodegen generate`)
+5. Run TodoApp UI tests (`xcodebuild -only-testing:TodoAppUITests`)
+
+#### Build Job (`build`)
+
+Depends on `unit-tests`. Runs on `macos-14`:
+1. Checkout code
+2. Setup Xcode (latest stable)
+3. Cache SPM dependencies
+4. Build in release configuration (`swift build -c release`)
 
 ## Release Workflow
 

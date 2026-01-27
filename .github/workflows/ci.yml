@@ -34,9 +34,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          key: ${{ runner.os }}-v2-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-v2-spm-
 
       - name: Resolve dependencies
         run: swift package resolve
@@ -162,9 +162,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          key: ${{ runner.os }}-v2-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-v2-spm-
 
       - name: Build release
         run: swift build -c release

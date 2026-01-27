@@ -33,8 +33,9 @@ cd Example/TodoApp
 xcodegen generate
 ```
 
-This creates `TodoApp.xcodeproj` with two targets:
+This creates `TodoApp.xcodeproj` with three targets:
 - **TodoApp** — the macOS SwiftUI application
+- **TodoAppTests** — unit tests for `TodoStore` (no UI dependency)
 - **TodoAppUITests** — the XCUITest bundle with PickleKit
 
 If you change `project.yml`, re-run `xcodegen generate` to regenerate the project.
@@ -62,7 +63,7 @@ open ~/Library/Developer/Xcode/DerivedData/TodoApp-*/Build/Products/Debug/TodoAp
 
 ## Running Tests
 
-### Run all UI tests from the command line
+### Run all tests from the command line
 
 ```bash
 cd Example/TodoApp
@@ -72,11 +73,35 @@ xcodebuild test \
   -destination 'platform=macOS' 2>&1 | xcbeautify
 ```
 
-This launches the TodoApp, runs all non-`@wip` scenarios (~11 scenarios), and reports results. You'll see the app window briefly appear and interact during each scenario.
+This runs both unit tests (`TodoAppTests`) and UI tests (`TodoAppUITests`). The UI tests launch the TodoApp, run all non-`@wip` scenarios (~11 scenarios), and report results. You'll see the app window briefly appear and interact during each scenario.
 
 For a detailed breakdown with step-level results and timing, see [HTML Test Reports](#html-test-reports).
 
-### Run all UI tests from Xcode
+### Run unit tests only
+
+```bash
+cd Example/TodoApp
+xcodebuild test \
+  -project TodoApp.xcodeproj \
+  -scheme TodoApp \
+  -destination 'platform=macOS' \
+  -only-testing:TodoAppTests 2>&1 | xcbeautify
+```
+
+Unit tests verify `TodoStore` logic (add, remove, update, clear, toggle) without launching the app.
+
+### Run UI tests only
+
+```bash
+cd Example/TodoApp
+xcodebuild test \
+  -project TodoApp.xcodeproj \
+  -scheme TodoApp \
+  -destination 'platform=macOS' \
+  -only-testing:TodoAppUITests 2>&1 | xcbeautify
+```
+
+### Run all tests from Xcode
 
 1. Open `TodoApp.xcodeproj`
 2. Select the **TodoApp** scheme in the toolbar
@@ -139,9 +164,13 @@ Example/TodoApp/
 ├── project.yml                    # xcodegen spec (committed, generates .xcodeproj)
 ├── README.md                      # This file
 ├── Sources/TodoApp/
-│   ├── TodoApp.swift              # @main SwiftUI app entry point
+│   ├── TodoApp.swift              # @main SwiftUI app entry point (Window scene, URL handler)
 │   ├── ContentView.swift          # Todo list UI with accessibility identifiers
-│   └── TodoItem.swift             # Simple Identifiable model struct
+│   ├── TodoItem.swift             # Simple Identifiable model struct
+│   ├── TodoStore.swift            # @Observable store: add, remove, update, clear, toggle
+│   └── Info.plist                 # App configuration (URL scheme: todoapp://)
+├── Tests/
+│   └── TodoStoreTests.swift       # Unit tests for TodoStore (no UI dependency)
 └── UITests/
     ├── Features/
     │   ├── todo_basics.feature        # CRUD, edit, and empty state (5 scenarios + 1 outline, @smoke)
@@ -150,7 +179,27 @@ Example/TodoApp/
     └── TodoUITests.swift              # GherkinTestCase subclass + step definitions
 ```
 
+Three targets: **TodoApp** (application), **TodoAppTests** (unit tests), **TodoAppUITests** (UI tests with PickleKit).
+
 ## How It Works
+
+### Architecture
+
+The app uses an `@Observable` `TodoStore` to manage todo state. The store is created as `@State` in the `App` struct and passed to `ContentView` as a plain `var` — SwiftUI's observation system tracks changes automatically. Extracting the store enables unit testing of all todo logic (`TodoStoreTests`) without touching the UI.
+
+The app uses `Window` (not `WindowGroup`) as its scene type. This prevents duplicate windows from being created when handling `onOpenURL` calls — `WindowGroup` would open a new window for each URL event, which confuses XCUITest element queries.
+
+### URL-scheme seeding
+
+The app registers the `todoapp://` URL scheme via `Info.plist`. The `onOpenURL` handler in `TodoApp.swift` supports a `seed` action:
+
+```
+todoapp://seed?todos=["Buy groceries","Walk the dog"]
+```
+
+When this URL is opened, the handler calls `store.clear()` followed by `store.add(titles:)` to replace the entire todo list in a single operation. This allows UI tests to set up preconditions without clicking through the UI step-by-step — faster and less flaky than entering each item via the text field.
+
+`Window` (rather than `WindowGroup`) is important here: a `WindowGroup` would create a new window each time a URL is opened, but `Window` reuses the existing one.
 
 ### End-to-end flow
 
@@ -192,6 +241,8 @@ The `ContentView` assigns identifiers to all interactive elements so XCUITest ca
 | `todoToggle_N` | Checkbox for todo at index N | `checkBoxes` |
 | `todoText_N` | Title text for todo at index N | `staticTexts` |
 | `deleteButton_N` | Trash button for todo at index N | `buttons` |
+| `editButton_N` | Edit button for todo at index N | `buttons` |
+| `editTextField_N` | Inline edit text field for todo at index N | `textFields` |
 | `clearAllButton` | Clear All button (visible when list non-empty) | `buttons` |
 
 Index-based identifiers (`_0`, `_1`, ...) shift when items are added or removed, matching the current array order.
@@ -347,6 +398,10 @@ Failed scenarios are expanded by default.
 
 | Pattern | Why |
 |---------|-----|
+| `@Observable TodoStore` | Extracted store for testability. `@State` in `App`, plain `var` in `ContentView`. Enables `TodoStoreTests` without UI. |
+| `Window` instead of `WindowGroup` | Prevents duplicate windows from URL handling. `WindowGroup` creates a new window per `onOpenURL` event. |
+| `todoapp://seed` URL scheme | Bypasses UI for fast, deterministic test setup. Calls `store.clear()` + `store.add(titles:)` in one step. |
+| `TodoAppTests` (unit tests) | Tests store logic (add, remove, update, clear, toggle) independently of the UI. |
 | `nonisolated(unsafe) static var app` | `XCUIApplication` isn't `Sendable`, but `StepHandler` requires `@Sendable`. Safe because XCUITest runs sequentially. |
 | `waitForExistence(timeout: 5)` on all queries | Prevents flaky tests from race conditions between UI updates and assertions. |
 | App reuse across scenarios | `setUp()` launches once, then activates. Clear All button resets state between scenarios for faster execution. |

@@ -408,11 +408,14 @@ All types are `Sendable`. Step handlers are `async throws`.
 
 The [`Example/TodoApp`](Example/TodoApp) directory contains a complete macOS SwiftUI todo app that demonstrates PickleKit with XCUITest. It includes:
 
+- **3 targets**: TodoApp (application), TodoAppTests (unit tests for `TodoStore`), TodoAppUITests (Gherkin UI tests)
 - **3 feature files** covering CRUD, completion toggling, data tables, scenario outlines, and tag filtering
+- **Unit tests** for the `@Observable TodoStore` — verifying add, remove, update, clear, and toggle without UI
 - **Step definitions** that drive `XCUIApplication` via accessibility identifiers
+- **URL-scheme seeding** (`todoapp://seed`) for fast, deterministic test setup
 - **xcodegen** project spec (`project.yml`) — run `xcodegen generate` to create the Xcode project
 
-See [`Example/TodoApp/README.md`](Example/TodoApp/README.md) for setup and usage instructions.
+See [`Example/TodoApp/README.md`](Example/TodoApp/README.md) for setup and usage, and [`docs/TESTING.md`](docs/TESTING.md) for test design philosophy and UI test best practices.
 
 ## License
 
