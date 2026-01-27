@@ -31,6 +31,11 @@ final class TodoUITests: GherkinTestCase {
             Self.app = XCUIApplication()
             Self.app.launchArguments.append("-disableAnimations")
             Self.app.launch()
+            // Wait for the accessibility tree to load (needed on CI runners)
+            XCTAssertTrue(
+                Self.app.windows.firstMatch.waitForExistence(timeout: 10),
+                "App window accessibility tree did not load"
+            )
         } else {
             Self.app.activate()
         }

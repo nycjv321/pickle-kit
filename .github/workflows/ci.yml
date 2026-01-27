@@ -129,6 +129,9 @@ jobs:
       - name: Install tools
         run: brew install xcbeautify xcodegen
 
+      - name: Enable developer tools for UI automation
+        run: sudo DevToolsSecurity -enable
+
       - name: Generate TodoApp project
         run: |
           cd Example/TodoApp
