@@ -147,6 +147,12 @@ unit-tests ──┬──> ui-tests
 
 Unit tests gate both the UI test and release build jobs, which run in parallel. See [Testing Guide](docs/TESTING.md) for CI configuration details and [Release Process](docs/RELEASE.md) for the automated release pipeline.
 
+## AI-Assisted Development
+
+PickleKit's Gherkin scenarios work as automated feedback loops improving the quality of the SDLC. This works especially well with AI coding agents. Write the spec in natural language, let the agent implement, run tests, and feed failures back — the same red-green-refactor cycle, with the agent doing the implementation. PickleKit itself was built this way with [Claude Code](https://claude.ai/claude-code).
+
+See [AI-Assisted Development](docs/AI-DEVELOPMENT.md) for the workflow, lessons learned, and practical advice.
+
 ## Example: TodoApp with XCUITest
 
 The [`Example/TodoApp`](Example/TodoApp) directory contains a complete macOS SwiftUI todo app that demonstrates PickleKit with XCUITest. It includes:
