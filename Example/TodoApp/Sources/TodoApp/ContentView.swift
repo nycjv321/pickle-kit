@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var todos: [TodoItem] = []
+    var store: TodoStore
     @State private var newTodoText = ""
     @State private var editingIndex: Int? = nil
     @State private var editText = ""
@@ -22,7 +22,7 @@ struct ContentView: View {
             }
             .padding()
 
-            if todos.isEmpty {
+            if store.todos.isEmpty {
                 Spacer()
                 Text("No todos yet. Add one above!")
                     .foregroundStyle(.secondary)
@@ -30,12 +30,12 @@ struct ContentView: View {
                 Spacer()
             } else {
                 List {
-                    ForEach(Array(todos.enumerated()), id: \.element.id) { index, todo in
+                    ForEach(Array(store.todos.enumerated()), id: \.element.id) { index, todo in
                         HStack {
                             Toggle(
                                 isOn: Binding(
-                                    get: { todos[index].isCompleted },
-                                    set: { todos[index].isCompleted = $0 }
+                                    get: { index < store.todos.count ? store.todos[index].isCompleted : false },
+                                    set: { store.setCompleted(at: index, $0) }
                                 )
                             ) {
                                 EmptyView()
@@ -81,13 +81,13 @@ struct ContentView: View {
             }
 
             HStack {
-                Text("\(todos.count) item\(todos.count == 1 ? "" : "s")")
+                Text("\(store.todos.count) item\(store.todos.count == 1 ? "" : "s")")
                     .foregroundStyle(.secondary)
                     .font(.caption)
                     .accessibilityIdentifier("todoCount")
                 Spacer()
-                if !todos.isEmpty {
-                    Button("Clear All") { todos.removeAll() }
+                if !store.todos.isEmpty {
+                    Button("Clear All") { store.clear() }
                         .font(.caption)
                         .foregroundStyle(.red)
                         .accessibilityIdentifier("clearAllButton")
@@ -102,24 +102,25 @@ struct ContentView: View {
     private func addTodo() {
         let trimmed = newTodoText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        todos.append(TodoItem(title: trimmed))
+        store.add(title: trimmed)
         newTodoText = ""
     }
 
     private func deleteTodo(at index: Int) {
         editingIndex = nil
-        todos.remove(at: index)
+        store.remove(at: index)
     }
 
     private func startEditing(at index: Int) {
-        editText = todos[index].title
+        guard store.todos.indices.contains(index) else { return }
+        editText = store.todos[index].title
         editingIndex = index
     }
 
     private func saveEdit(at index: Int) {
         let trimmed = editText.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty {
-            todos[index].title = trimmed
+            store.updateTitle(at: index, title: trimmed)
         }
         editingIndex = nil
         editText = ""

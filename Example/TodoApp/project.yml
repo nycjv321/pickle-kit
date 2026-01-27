@@ -19,8 +19,27 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.picklekit.example.todoapp
+    info:
+      path: Sources/TodoApp/Info.plist
+      properties:
+        LSApplicationCategoryType: public.app-category.productivity
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - todoapp
+
+  TodoAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+    dependencies:
+      - target: TodoApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.picklekit.example.todoapp.tests
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/TodoApp.app/Contents/MacOS/TodoApp
+        BUNDLE_LOADER: $(TEST_HOST)
 
   TodoAppUITests:
     type: bundle.ui-testing
@@ -45,9 +64,11 @@ schemes:
     build:
       targets:
         TodoApp: all
+        TodoAppTests: [test]
         TodoAppUITests: [test]
     test:
       targets:
+        - TodoAppTests
         - TodoAppUITests
       environmentVariables:
         - variable: PICKLE_REPORT

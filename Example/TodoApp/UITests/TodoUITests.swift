@@ -65,17 +65,18 @@ final class TodoUITests: GherkinTestCase {
         given("I have the following todos in my list:") { match in
             let app = TodoUITests.app!
             let rows = match.dataTable!.dataRows
-            for row in rows {
-                let title = row[0]
-                let textField = app.textFields["todoTextField"]
-                XCTAssertTrue(textField.waitForExistence(timeout: 5))
-                textField.click()
-                TodoUITests.pasteText(title, into: textField)
+            let titles = rows.map { $0[0] }
 
-                let addButton = app.buttons["addButton"]
-                XCTAssertTrue(addButton.waitForExistence(timeout: 5))
-                addButton.click()
-            }
+            let jsonData = try JSONEncoder().encode(titles)
+            let jsonString = String(data: jsonData, encoding: .utf8)!
+            let encoded = jsonString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+
+            let url = URL(string: "todoapp://seed?todos=\(encoded)")!
+            NSWorkspace.shared.open(url)
+
+            // Wait for seeded data to appear in the UI
+            let firstTodo = app.staticTexts["todoText_0"]
+            XCTAssertTrue(firstTodo.waitForExistence(timeout: 5), "Expected seeded todos to appear")
         }
 
         // MARK: - When
