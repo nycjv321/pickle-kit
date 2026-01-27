@@ -163,4 +163,42 @@ final class StepRegistryTests: XCTestCase {
         let step = Step(keyword: .given, text: "not exact match")
         XCTAssertNil(try registry.match(step))
     }
+
+    // MARK: - Invalid Patterns
+
+    func testInvalidPatternDoesNotCrash() {
+        registry.given("I have (unclosed") { _ in }
+        XCTAssertEqual(registry.count, 0)
+    }
+
+    func testInvalidPatternRecordsError() {
+        registry.given("I have (unclosed") { _ in }
+        XCTAssertEqual(registry.registrationErrors.count, 1)
+        if case .invalidPattern(let pattern, _) = registry.registrationErrors.first {
+            XCTAssertEqual(pattern, "I have (unclosed")
+        } else {
+            XCTFail("Expected invalidPattern error")
+        }
+    }
+
+    func testInvalidPatternErrorDescription() {
+        registry.given("bad[") { _ in }
+        let description = registry.registrationErrors.first?.localizedDescription ?? ""
+        XCTAssertTrue(description.contains("bad["), "Error description should contain the pattern")
+        XCTAssertTrue(description.contains("Invalid step pattern"), "Error description should indicate invalid pattern")
+    }
+
+    func testValidAndInvalidPatternsMixed() {
+        registry.given("valid pattern") { _ in }
+        registry.given("invalid (unclosed") { _ in }
+        XCTAssertEqual(registry.count, 1)
+        XCTAssertEqual(registry.registrationErrors.count, 1)
+    }
+
+    func testResetClearsRegistrationErrors() {
+        registry.given("I have (unclosed") { _ in }
+        XCTAssertEqual(registry.registrationErrors.count, 1)
+        registry.reset()
+        XCTAssertTrue(registry.registrationErrors.isEmpty)
+    }
 }

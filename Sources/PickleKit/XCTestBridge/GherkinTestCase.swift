@@ -263,33 +263,42 @@ open class GherkinTestCase: XCTestCase {
         registry.reset()
         registerStepDefinitions()
 
+        if !registry.registrationErrors.isEmpty {
+            for error in registry.registrationErrors {
+                XCTFail(error.localizedDescription)
+            }
+            return
+        }
+
         let runner = ScenarioRunner(registry: registry)
 
         // Use XCTest async support
         let expectation = self.expectation(description: "Scenario: \(scenario.name)")
 
         Task {
-            let result = try await runner.run(
-                scenario: scenario,
-                background: background,
-                feature: feature
-            )
-
-            if reportingEnabled {
-                Self._resultCollector.record(
-                    scenarioResult: result,
-                    featureName: feature.name,
-                    featureTags: feature.tags,
-                    sourceFile: feature.sourceFile
+            do {
+                let result = try await runner.run(
+                    scenario: scenario,
+                    background: background,
+                    feature: feature
                 )
-            }
 
-            if !result.passed, let error = result.error {
-                // Extract source location info for better diagnostics
-                let message = self.formatError(error, scenario: scenario, feature: feature)
-                XCTFail(message)
-            }
+                if reportingEnabled {
+                    Self._resultCollector.record(
+                        scenarioResult: result,
+                        featureName: feature.name,
+                        featureTags: feature.tags,
+                        sourceFile: feature.sourceFile
+                    )
+                }
 
+                if !result.passed, let error = result.error {
+                    let message = self.formatError(error, scenario: scenario, feature: feature)
+                    XCTFail(message)
+                }
+            } catch {
+                XCTFail("Scenario '\(scenario.name)' threw an unexpected error: \(error.localizedDescription)")
+            }
             expectation.fulfill()
         }
 

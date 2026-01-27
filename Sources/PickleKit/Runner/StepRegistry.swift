@@ -28,6 +28,7 @@ public typealias StepHandler = @Sendable (StepMatch) async throws -> Void
 public enum StepRegistryError: Error, LocalizedError, Equatable {
     case undefinedStep(text: String, keyword: String, line: Int)
     case ambiguousStep(text: String, matchCount: Int)
+    case invalidPattern(pattern: String, underlyingMessage: String)
 
     public var errorDescription: String? {
         switch self {
@@ -35,6 +36,8 @@ public enum StepRegistryError: Error, LocalizedError, Equatable {
             return "Undefined step at line \(line): \(keyword) \(text)"
         case .ambiguousStep(let text, let matchCount):
             return "Ambiguous step '\(text)' matches \(matchCount) definitions"
+        case .invalidPattern(let pattern, let underlyingMessage):
+            return "Invalid step pattern '\(pattern)': \(underlyingMessage)"
         }
     }
 }
@@ -54,6 +57,9 @@ private struct StepDefinition: @unchecked Sendable {
 public final class StepRegistry: @unchecked Sendable {
 
     private var definitions: [StepDefinition] = []
+
+    /// Errors from invalid regex patterns passed during registration.
+    public private(set) var registrationErrors: [StepRegistryError] = []
 
     public init() {}
 
@@ -79,9 +85,10 @@ public final class StepRegistry: @unchecked Sendable {
         register(pattern: pattern, handler: handler)
     }
 
-    /// Clear all registered definitions.
+    /// Clear all registered definitions and registration errors.
     public func reset() {
         definitions = []
+        registrationErrors = []
     }
 
     /// The number of registered step definitions.
@@ -133,11 +140,15 @@ public final class StepRegistry: @unchecked Sendable {
     // MARK: - Private
 
     private func register(pattern: String, handler: @escaping StepHandler) {
-        // Anchor the pattern to match the full string
         let anchored = "^\(pattern)$"
-        // Force try is acceptable here — invalid patterns are programmer errors
-        // that should be caught during development
-        let regex = try! NSRegularExpression(pattern: anchored, options: [])
-        definitions.append(StepDefinition(pattern: pattern, regex: regex, handler: handler))
+        do {
+            let regex = try NSRegularExpression(pattern: anchored, options: [])
+            definitions.append(StepDefinition(pattern: pattern, regex: regex, handler: handler))
+        } catch {
+            registrationErrors.append(.invalidPattern(
+                pattern: pattern,
+                underlyingMessage: error.localizedDescription
+            ))
+        }
     }
 }
