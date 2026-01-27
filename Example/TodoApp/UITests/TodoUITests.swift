@@ -13,11 +13,23 @@ final class TodoUITests: GherkinTestCase {
     // so this is safe in practice.
     nonisolated(unsafe) static var app: XCUIApplication!
 
+    /// Paste text into an element via NSPasteboard (much faster than typeText).
+    private static func pasteText(_ text: String, into element: XCUIElement) {
+        DispatchQueue.main.sync {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            element.typeKey("a", modifierFlags: .command)
+            element.typeKey("v", modifierFlags: .command)
+        }
+    }
+
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
         if Self.app == nil {
             Self.app = XCUIApplication()
+            Self.app.launchArguments.append("-disableAnimations")
             Self.app.launch()
         } else {
             Self.app.activate()
@@ -40,7 +52,7 @@ final class TodoUITests: GherkinTestCase {
         given("the todo list is empty") { _ in
             let app = TodoUITests.app!
             let clearButton = app.buttons["clearAllButton"]
-            if clearButton.waitForExistence(timeout: 2) {
+            if clearButton.waitForExistence(timeout: 0.5) {
                 clearButton.click()
             }
             let emptyState = app.staticTexts["emptyStateText"]
@@ -58,8 +70,7 @@ final class TodoUITests: GherkinTestCase {
                 let textField = app.textFields["todoTextField"]
                 XCTAssertTrue(textField.waitForExistence(timeout: 5))
                 textField.click()
-                textField.typeKey("a", modifierFlags: .command)
-                textField.typeText(title)
+                TodoUITests.pasteText(title, into: textField)
 
                 let addButton = app.buttons["addButton"]
                 XCTAssertTrue(addButton.waitForExistence(timeout: 5))
@@ -75,9 +86,7 @@ final class TodoUITests: GherkinTestCase {
             let textField = app.textFields["todoTextField"]
             XCTAssertTrue(textField.waitForExistence(timeout: 5))
             textField.click()
-            // Select all existing text and replace
-            textField.typeKey("a", modifierFlags: .command)
-            textField.typeText(text)
+            TodoUITests.pasteText(text, into: textField)
         }
 
         when("I tap the add button") { _ in
@@ -99,8 +108,7 @@ final class TodoUITests: GherkinTestCase {
             let editField = app.textFields["editTextField_\(index)"]
             XCTAssertTrue(editField.waitForExistence(timeout: 5))
             editField.click()
-            editField.typeKey("a", modifierFlags: .command)
-            editField.typeText(newText)
+            TodoUITests.pasteText(newText, into: editField)
             editField.typeKey(.return, modifierFlags: [])
         }
 
@@ -128,8 +136,7 @@ final class TodoUITests: GherkinTestCase {
                 let textField = app.textFields["todoTextField"]
                 XCTAssertTrue(textField.waitForExistence(timeout: 5))
                 textField.click()
-                textField.typeKey("a", modifierFlags: .command)
-                textField.typeText(title)
+                TodoUITests.pasteText(title, into: textField)
 
                 let addButton = app.buttons["addButton"]
                 XCTAssertTrue(addButton.waitForExistence(timeout: 5))
@@ -145,8 +152,7 @@ final class TodoUITests: GherkinTestCase {
                 let textField = app.textFields["todoTextField"]
                 XCTAssertTrue(textField.waitForExistence(timeout: 5))
                 textField.click()
-                textField.typeKey("a", modifierFlags: .command)
-                textField.typeText("\(prefix) \(i)")
+                TodoUITests.pasteText("\(prefix) \(i)", into: textField)
 
                 let addButton = app.buttons["addButton"]
                 XCTAssertTrue(addButton.waitForExistence(timeout: 5))
