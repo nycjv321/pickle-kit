@@ -25,16 +25,16 @@ Human writes spec (.feature) → Agent implements → Tests run → Failures →
 
 ## How PickleKit Was Built
 
-PickleKit and its TodoApp example were built with [Claude Code](https://claude.ai/claude-code). Aspects of the BDD feedback loop described above were used during development — test failures were fed back as context to drive refinement. However, this was a manual, developer-guided process rather than a fully automated pipeline. The agent did not autonomously run tests, read output, and iterate in a closed loop; a developer invoked each cycle and made judgment calls along the way.
+PickleKit and its TodoApp example were built with [Claude Code](https://claude.ai/claude-code). Aspects of the BDD feedback loop described above were used during development — test failures were fed back as context to drive refinement. However, this was a manual, developer-guided process rather than a fully automated pipeline. Some development cycles were autonomous — the agent ran tests, read failures, and iterated without intervention — while others required the developer to invoke steps, interpret results, or redirect the approach.
 
-This process was useful but far from seamless. The agent produced incorrect implementations, introduced regressions, and sometimes misunderstood the requirements. Many iterations were needed to reach a working state. Building software this way requires a developer with strong technical judgment to guide the process:
+This process was useful, though not without friction. The agent occasionally produced incorrect implementations, introduced regressions, or misunderstood requirements, and some features took several iterations to get right. Building software this way still requires an engineer with an architectural understanding of how software is made to guide the process:
 
 - **Define clear, unambiguous specifications upfront.** Vague or incomplete specs produce vague or incomplete implementations. The quality of the Gherkin directly determines how effective the feedback loop is.
 - **Recognize when test failures reflect a spec problem vs. an implementation problem.** Sometimes the agent's code is wrong; sometimes the test expectation is wrong. The human needs to make that call.
 - **Catch issues that tests don't cover.** Architecture, performance, security, maintainability — none of these are validated by passing tests. A developer needs to review the agent's output with the same rigor they'd apply to a pull request from a junior engineer.
 - **Make judgment calls the agent can't.** When to refactor instead of patch, when to change approach entirely, when to simplify. These decisions require understanding the broader context of the project.
 
-The human role is not replaced — it shifts from writing every line of code to defining intent, reviewing output, and steering the process. The developer's expertise becomes more important, not less, because they're responsible for everything the tests don't catch.
+The human role is not replaced — it shifts from writing every line of code to defining intent, reviewing output, and steering the process. The developer's expertise becomes more important, not less, because they're responsible for everything the tests don't catch and the agent may miss.
 
 ## Limitations and Practical Advice
 
