@@ -1,8 +1,8 @@
 # BDD as a Feedback Loop for AI-Assisted Development
 
-BDD scenarios are human-readable specifications. When an AI coding agent implements code against those specs, test results become structured, automated feedback — the agent can read failures and iterate without manual intervention.
+BDD scenarios are human-readable specifications. When an AI coding agent implements code against those specs, test results can serve as structured feedback — the agent reads failures and iterates. PickleKit provides the foundational plumbing to enable this kind of workflow on Apple platforms, but the approach itself is still exploratory and not yet a mature, turnkey solution.
 
-This creates a tight loop: a human writes the spec in Gherkin, the agent implements the code, tests run, failures feed back into the agent, and the agent refines. It's the same red-green-refactor cycle developers use, with the AI agent doing the implementation work.
+The idea is a tight loop: a human writes the spec in Gherkin, the agent implements the code, tests run, failures feed back into the agent, and the agent refines. It's the same red-green-refactor cycle developers use, with the AI agent doing the implementation work. Aspects of this workflow were used during PickleKit's own development (see below), but making it reliable and repeatable requires further exploration.
 
 ## The Workflow
 
@@ -25,9 +25,9 @@ Human writes spec (.feature) → Agent implements → Tests run → Failures →
 
 ## How PickleKit Was Built
 
-PickleKit and its TodoApp example were built with [Claude Code](https://claude.ai/claude-code). Test failures were the primary mechanism for driving refinement — when the agent produced code that didn't work, the failing test output was fed back as context, and the agent used that feedback to diagnose and fix the issue.
+PickleKit and its TodoApp example were built with [Claude Code](https://claude.ai/claude-code). Aspects of the BDD feedback loop described above were used during development — test failures were fed back as context to drive refinement. However, this was a manual, developer-guided process rather than a fully automated pipeline. The agent did not autonomously run tests, read output, and iterate in a closed loop; a developer invoked each cycle and made judgment calls along the way.
 
-This process worked, but it was not seamless. The agent produced incorrect implementations, introduced regressions, and sometimes misunderstood the requirements. Many iterations were needed to reach a working state. Building software this way requires a developer with strong technical judgment to guide the process:
+This process was useful but far from seamless. The agent produced incorrect implementations, introduced regressions, and sometimes misunderstood the requirements. Many iterations were needed to reach a working state. Building software this way requires a developer with strong technical judgment to guide the process:
 
 - **Define clear, unambiguous specifications upfront.** Vague or incomplete specs produce vague or incomplete implementations. The quality of the Gherkin directly determines how effective the feedback loop is.
 - **Recognize when test failures reflect a spec problem vs. an implementation problem.** Sometimes the agent's code is wrong; sometimes the test expectation is wrong. The human needs to make that call.
@@ -45,3 +45,14 @@ The human role is not replaced — it shifts from writing every line of code to 
 **Start narrow.** Well-defined, small features work better than broad, ambiguous ones. Each feature file should cover a focused area of functionality. The agent iterates more effectively when the scope is constrained and the expected behavior is explicit.
 
 **Review every iteration.** Don't wait until all tests pass to review the agent's output. Check the implementation after each significant change — it's easier to catch architectural drift early than to unwind it after the fact.
+
+## Current Status and Future Exploration
+
+PickleKit provides the building blocks — a Gherkin parser, step registry, scenario runner, XCTest bridge, and HTML reporting — that make a BDD feedback loop possible on Apple platforms. The pieces are functional and tested, but the end-to-end workflow of an AI agent autonomously writing code against Gherkin specs, running tests, and iterating on failures is not a solved problem. Key areas that need further exploration include:
+
+- **Agent-driven test execution.** Today the developer manually runs tests and feeds output back. Closing this loop — where the agent invokes `swift test` or `xcodebuild`, parses structured output, and iterates — would make the workflow significantly more practical.
+- **Structured failure output.** PickleKit's test output is human-readable but not optimized for machine consumption. Structured formats (JSON, JUnit XML) that agents can parse reliably would reduce misinterpretation.
+- **Spec-to-implementation reliability.** LLMs frequently misinterpret Gherkin steps or produce subtly wrong implementations. Understanding which patterns of specification lead to more reliable agent output is an open question.
+- **Guardrails and review tooling.** Automated checks beyond test pass/fail — architectural conformance, diff review, regression detection — would help catch issues that tests alone miss.
+
+This is early-stage work. If you're interested in BDD-driven AI development workflows, contributions, ideas, and feedback are welcome — open an issue or start a discussion on the [PickleKit repository](https://github.com/nycjv321/pickle-kit).
