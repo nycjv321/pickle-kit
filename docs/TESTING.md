@@ -1,8 +1,8 @@
 # Test Design Philosophy
 
-This document covers the reasoning behind PickleKit's testing approach, the recommended test pyramid for projects using PickleKit, and practical rules for writing UI tests.
+This document covers the reasoning behind PickleKit's testing approach, the recommended testing strategy for projects using PickleKit, and practical rules for writing UI tests.
 
-## Why BDD / Why PickleKit
+## Why BDD
 
 ### Unit Tests vs. BDD Tests
 
@@ -19,10 +19,6 @@ Scenario: Add a single todo
 
 and understand exactly what the test covers without reading Swift code.
 
-### Why PickleKit Exists
-
-Before PickleKit, using Cucumber-style BDD in Swift required external toolchains — Ruby (via Cucumber), Java (via Karate), or CocoaPods-based frameworks. PickleKit provides a zero-dependency Swift-native Cucumber framework that integrates directly with XCTest. No Gemfile, no Podfile, no build plugins — just a Swift package dependency.
-
 ### When to Use Each
 
 | Test Type | Use For | Example |
@@ -32,34 +28,53 @@ Before PickleKit, using Cucumber-style BDD in Swift required external toolchains
 
 Use unit tests for anything that can be tested without UI. Use Gherkin scenarios for flows that exercise the full stack from user interaction through to visible result.
 
-## Test Pyramid for PickleKit Projects
+## Testing Trophy for PickleKit Projects
+
+The **Testing Trophy** (Kent C. Dodds) and **Testing Honeycomb** (Spotify) are modern alternatives to the traditional test pyramid. Their core insight: most applications are integrations — unit tests in isolation cannot validate that components work together correctly.
+
+> "The more your tests resemble the way your software is used, the more confidence they can give you." — Kent C. Dodds
+
+The trophy has four layers, with integration tests forming the widest band:
 
 ```
-        /  UI / Acceptance  \        ← Fewest: critical user flows (GherkinTestCase + XCUITest)
-       /  Integration Tests  \       ← Middle: parser + runner pipeline (GherkinIntegrationTests)
-      /     Unit Tests        \      ← Most: model, store, logic (TodoStoreTests, ParserTests, etc.)
+          ╭──╮
+          │E2E│                ← Selective: critical user flows (GherkinTestCase + XCUITest)
+       ╭──┴──┴──╮
+       │         │
+    ╭──┤Integr-  ├──╮
+    │  │  ation  │  │         ← Most investment: full pipeline (GherkinIntegrationTests)
+    │  │         │  │
+    ╰──┴─────────┴──╯
+       ╭─────────╮
+       │  Unit   │            ← Targeted: pure logic (TodoStore, parser internals)
+       ╰─────────╯
+       ╭─────────╮
+       │ Static  │            ← Swift compiler, type system, linter
+       ╰─────────╯
 ```
+
+PickleKit covers the **E2E / acceptance** layer of the trophy — human-readable Cucumber scenarios that verify real user flows through the full stack.
 
 ### Unit Tests
 
-Fast, isolated tests covering model and store logic. These form the base of the pyramid and should be the majority of your test suite.
+Valuable for pure logic and isolated components, but not the primary confidence driver. Use them where the input/output boundary is clear and no integration wiring is needed.
 
 - **Framework tests**: `ParserTests`, `StepRegistryTests`, `ScenarioRunnerTests`, `TagFilterTests`, `StepResultTests`, `HTMLReportGeneratorTests`
 - **App tests**: `TodoStoreTests` — verifies add, remove, update, clear, toggle completion without any UI
 
 ### Integration Tests
 
-End-to-end tests of the PickleKit pipeline: parse Gherkin → expand outlines → register steps → run scenarios → collect results.
+The sweet spot for confidence. These exercise real components working together and catch the class of bugs that unit tests miss: wiring errors, contract mismatches, and incorrect assumptions between layers.
 
-- `GherkinIntegrationTests` — a `GherkinTestCase` subclass that runs all fixture `.feature` files through the full pipeline
+- `GherkinIntegrationTests` — a `GherkinTestCase` subclass that runs all fixture `.feature` files through the full parse → expand → register → run pipeline
+- Most testing effort should go here. When in doubt about where to add a test, prefer an integration test over a unit test
 
-### UI / Acceptance Tests
+### UI / Acceptance Tests (E2E)
 
-Gherkin scenarios driving XCUITest. These are the slowest and most expensive tests. Use them for critical user flows, not exhaustive edge cases.
+PickleKit + XCUITest covers this layer. These tests verify critical user flows in human-readable Gherkin and are the only tests that exercise the real UI rendering and interaction layer. Use them selectively for flows that can only be validated through the real UI.
 
 - `TodoUITests` — drives the TodoApp through XCUIApplication, verifying add, delete, edit, toggle, batch operations, and empty state
-
-Unit tests should be the majority. UI tests should cover the critical paths that users actually traverse.
+- Keep E2E tests focused on critical paths. Edge cases and error conditions are better covered at the integration or unit layer
 
 ## UI Test Design Rules
 
@@ -92,9 +107,20 @@ Background:
   And the todo list is empty
 ```
 
-### Bypass the UI for Setup When Possible
+### Grey-Box Testing: Bypass the UI for Setup
 
-Use URL schemes or other programmatic mechanisms to seed data rather than clicking through the UI step-by-step. The TodoApp uses `todoapp://seed?todos=["item1","item2"]` to populate todos in a single call — faster and less flaky than entering each item through the text field.
+In web and API applications, grey-box testing means calling the API directly from test code to set up state — for example, `POST /api/todos` to seed data — rather than clicking through the UI. The test is "grey-box" because it uses internal knowledge of the app's interfaces while still asserting against the external UI.
+
+iOS and macOS apps don't expose REST APIs, but they do have URL schemes and deep links. `todoapp://seed?todos=[...]` serves the same purpose as a `POST /api/seed` endpoint — it lets tests set up preconditions programmatically without touching the UI.
+
+Why this matters:
+
+- **Faster**: Skips UI animations and input latency. Seeding via URL is near-instant compared to typing into text fields and tapping buttons
+- **More deterministic**: No risk of flaky text entry, missed taps, or timing issues during setup steps
+- **More reliable**: Fewer moving parts in the setup path means fewer false failures
+- **Focused assertions**: Tests assert only the behavior under test, not the correctness of the setup path
+
+The TodoApp uses `todoapp://seed?todos=["item1","item2"]` to populate todos in a single call:
 
 ```swift
 given("the following todos exist:") { match in
@@ -126,3 +152,29 @@ Use `Window` instead of `WindowGroup` for apps under UI test. `WindowGroup` can 
 ### `nonisolated(unsafe) static var app`
 
 `XCUIApplication` isn't `Sendable`, but `StepHandler` requires `@Sendable` closures. Storing the app as a `nonisolated(unsafe) static var` is safe because XCUITest runs scenarios sequentially — there is no concurrent access.
+
+## Continuous Integration
+
+PickleKit uses GitHub Actions to run the full test suite on every push and pull request. The pipeline has three jobs:
+
+```
+unit-tests ──┬──> ui-tests
+             └──> build
+```
+
+### How Tests Run in CI
+
+- **PickleKit library tests** run via `swift test` with code coverage enabled
+- **TodoApp unit tests** run via `xcodebuild -only-testing:TodoAppTests`
+- **TodoApp UI tests** run via `xcodebuild -only-testing:TodoAppUITests` in a separate job that depends on unit tests passing first
+- **Release build** validation runs `swift build -c release` in parallel with UI tests
+
+### CI Requirements for UI Tests
+
+UI tests require a GUI session on the CI runner. The pipeline enables `DevToolsSecurity` and waits for accessibility permissions before running UI tests. CI runners use `macos-14` with the latest stable Xcode.
+
+### Test Reporting
+
+CI generates JUnit XML reports via `xcbeautify --report junit --report-path .` and publishes them with `dorny/test-reporter`. This surfaces test results directly in the GitHub Actions UI.
+
+See [Release Process](RELEASE.md) for the full CI pipeline diagram, job details, and the automated release workflow.

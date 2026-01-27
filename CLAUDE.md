@@ -63,7 +63,7 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md) for test design philosophy, the BDD rationale, test pyramid guidance, and UI test best practices.
+See [docs/TESTING.md](docs/TESTING.md) for test design philosophy, the BDD rationale, testing trophy guidance, and UI test best practices.
 
 ```bash
 # PickleKit library tests
