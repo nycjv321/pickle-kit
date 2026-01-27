@@ -7,11 +7,12 @@ A minimal macOS SwiftUI todo app demonstrating PickleKit with XCUITest.
 - macOS 14+
 - Xcode 15+ (with command line tools selected — `xcode-select -p` should show `/Applications/Xcode.app/...`)
 - [xcodegen](https://github.com/yonaskolb/XcodeGen)
+- [xcbeautify](https://github.com/cpisciotta/xcbeautify)
 
-Install xcodegen if you don't have it:
+Install dependencies if you don't have them:
 
 ```bash
-brew install xcodegen
+brew install xcodegen xcbeautify
 ```
 
 ## Quick Start
@@ -20,7 +21,7 @@ brew install xcodegen
 # From the repository root
 cd Example/TodoApp
 xcodegen generate
-xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS'
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' 2>&1 | xcbeautify
 ```
 
 ## Setup
@@ -55,7 +56,7 @@ The app window shows a text field, an Add button, and a list area. Type a todo a
 ```bash
 # Build and run (launches the app)
 cd Example/TodoApp
-xcodebuild build -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS'
+xcodebuild build -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' 2>&1 | xcbeautify
 open ~/Library/Developer/Xcode/DerivedData/TodoApp-*/Build/Products/Debug/TodoApp.app
 ```
 
@@ -68,22 +69,20 @@ cd Example/TodoApp
 xcodebuild test \
   -project TodoApp.xcodeproj \
   -scheme TodoApp \
-  -destination 'platform=macOS'
+  -destination 'platform=macOS' 2>&1 | xcbeautify
 ```
 
 This launches the TodoApp, runs all non-`@wip` scenarios (~11 scenarios), and reports results. You'll see the app window briefly appear and interact during each scenario.
 
-### Run all UI tests from Xcode
+For a detailed breakdown with step-level results and timing, see [HTML Test Reports](#html-test-reports).
 
-> **Reminder:** Run `xcodegen generate` first if you haven't already — the `.xcodeproj` is not checked in.
+### Run all UI tests from Xcode
 
 1. Open `TodoApp.xcodeproj`
 2. Select the **TodoApp** scheme in the toolbar
 3. Press **Cmd+U** to run all tests
 
-Each Gherkin scenario appears as a separate `test_<Scenario_Name>` method in Xcode's test navigator (left sidebar, test icon). You can see pass/fail status per scenario. There are currently 12 active scenarios (1 is excluded by the `@wip` tag).
-
-To run a single scenario from Xcode, click the diamond icon next to any test method in the test navigator, or right-click it and choose **Run**.
+You'll see the app window briefly appear and interact during each scenario. Results appear in the test navigator.
 
 ### Run a specific scenario
 
@@ -95,7 +94,7 @@ xcodebuild test \
   -project TodoApp.xcodeproj \
   -scheme TodoApp \
   -destination 'platform=macOS' \
-  -only-testing 'TodoAppUITests/TodoUITests/test_Add_a_single_todo'
+  -only-testing 'TodoAppUITests/TodoUITests/test_Add_a_single_todo' 2>&1 | xcbeautify
 ```
 
 In Xcode, click the diamond icon next to any individual test in the test navigator to run just that one.
@@ -109,7 +108,7 @@ Use the `CUCUMBER_TAGS` environment variable to include only scenarios matching 
 CUCUMBER_TAGS=smoke xcodebuild test \
   -project TodoApp.xcodeproj \
   -scheme TodoApp \
-  -destination 'platform=macOS'
+  -destination 'platform=macOS' 2>&1 | xcbeautify
 ```
 
 Use `CUCUMBER_EXCLUDE_TAGS` to exclude specific tags:
@@ -119,7 +118,7 @@ Use `CUCUMBER_EXCLUDE_TAGS` to exclude specific tags:
 CUCUMBER_EXCLUDE_TAGS=slow xcodebuild test \
   -project TodoApp.xcodeproj \
   -scheme TodoApp \
-  -destination 'platform=macOS'
+  -destination 'platform=macOS' 2>&1 | xcbeautify
 ```
 
 The `@wip` tag is already excluded at compile time via the `tagFilter` override in `TodoUITests.swift`. Environment variable filters are merged with the compile-time filter.
@@ -145,7 +144,7 @@ Example/TodoApp/
 │   └── TodoItem.swift             # Simple Identifiable model struct
 └── UITests/
     ├── Features/
-    │   ├── todo_basics.feature        # CRUD and empty state (5 scenarios, @smoke)
+    │   ├── todo_basics.feature        # CRUD, edit, and empty state (5 scenarios + 1 outline, @smoke)
     │   ├── todo_completion.feature    # Toggle completion (3 scenarios)
     │   └── todo_batch.feature         # Data tables, outlines, tags (4+1 scenarios, @smoke)
     └── TodoUITests.swift              # GherkinTestCase subclass + step definitions
@@ -329,7 +328,7 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 **Post-test report copy tip** — chain `xcodebuild` with a copy command to get the report in your working directory:
 
 ```bash
-xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' \
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' 2>&1 | xcbeautify \
   && cp ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/Data/tmp/pickle-report.html . \
   && open pickle-report.html
 ```
@@ -385,3 +384,11 @@ Check that accessibility identifiers in `ContentView.swift` match the strings us
 ### "No scenario found for test_..."
 
 The scenario name was sanitized differently than expected. Check the test navigator in Xcode to see the actual generated method names. Non-alphanumeric characters become underscores, and consecutive underscores are collapsed.
+
+### Tests crash or behave unexpectedly after changing feature files
+
+Xcode may cache stale test method metadata. Clean the build and package caches:
+
+1. In Xcode: **Product → Clean Build Folder** (Shift+Cmd+K)
+2. Delete DerivedData: `rm -rf ~/Library/Developer/Xcode/DerivedData/TodoApp-*`
+3. Re-run `xcodegen generate` and rebuild

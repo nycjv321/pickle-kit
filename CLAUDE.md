@@ -34,7 +34,8 @@ Sources/PickleKit/
 - **All AST types are `Sendable` and `Equatable`** — value types throughout
 - **`StepRegistry` is instance-based** (not singleton) for testability
 - **`StepHandler` is `@Sendable (StepMatch) async throws -> Void`** — async/await compatible
-- **`GherkinTestCase` uses ObjC runtime** (`class_addMethod`, `unsafeBitCast`) to create dynamic test methods since `XCTestCase.init(selector:)` is unavailable in Swift
+- **`GherkinTestCase` uses ObjC runtime** (`class_addMethod`, `unsafeBitCast`) to create dynamic test methods since `XCTestCase.init(selector:)` is unavailable in Swift. **Important:** `XCTestSuite(forTestCaseClass:)` must be called *after* all `class_addMethod` calls — it discovers `test_*` methods via ObjC reflection. Creating the suite first and then adding methods produces duplicate entries that can crash Xcode's result bundle builder.
+- **`DataTable.dataRows` always drops the first row** — it assumes the first row is a header. All data tables used with `dataRows` must include an explicit header row (e.g., `| title |`). Tables without a header will silently lose the first data row.
 - **Per-class scenario maps** — `GherkinTestCase` stores scenario data in a dictionary keyed by `ObjectIdentifier(self)` so multiple subclasses (and the base class itself when discovered by XCTest) don't overwrite each other's data
 - **`GherkinParser` is a line-by-line state machine** with states: idle → inFeature → inBackground/inScenario/inOutline/inExamples/inDocString
 - **Conditional compilation** — `GherkinTestCase` is wrapped in `#if canImport(XCTest) && canImport(ObjectiveC)`
@@ -279,7 +280,7 @@ Example/TodoApp/
 ```bash
 cd Example/TodoApp
 xcodegen generate
-xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS'
+xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platform=macOS' 2>&1 | xcbeautify
 ```
 
 ### HTML Reports with xcodebuild
@@ -309,7 +310,8 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 ### Key Patterns
 
 - **`nonisolated(unsafe) static var app: XCUIApplication!`** — XCUIApplication isn't Sendable, but StepHandler requires @Sendable closures. Safe because XCUITest runs sequentially.
-- **Index-based accessibility identifiers** (`todoText_0`, `deleteButton_1`) — deterministic IDs for ForEach with enumerated array.
+- **App reuse across scenarios** — `setUp()` launches only once (`app == nil`), then reuses via `activate()`. Each scenario starts with a clean state via the "the todo list is empty" background step (clicks "Clear All").
+- **Index-based accessibility identifiers** (`todoText_0`, `deleteButton_1`, `editButton_0`, `editTextField_0`) — deterministic IDs for ForEach with enumerated array.
 - **`waitForExistence(timeout: 5)`** — all element queries use this to avoid flakiness.
 - **Local package dependency** — `project.yml` references PickleKit via `path: ../..`.
 - **Tag filtering** — `tagFilter` override excludes `@wip`; `CUCUMBER_TAGS` env var for CLI filtering.

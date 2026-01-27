@@ -55,4 +55,4 @@ schemes:
           isEnabled: true
         - variable: PICKLE_REPORT_PATH
           value: "/tmp/pickle-report.html"
-          isEnabled: false
+          isEnabled: true

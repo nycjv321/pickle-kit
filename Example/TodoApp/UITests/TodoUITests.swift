@@ -50,6 +50,23 @@ final class TodoUITests: GherkinTestCase {
             )
         }
 
+        given("I have the following todos in my list:") { match in
+            let app = TodoUITests.app!
+            let rows = match.dataTable!.dataRows
+            for row in rows {
+                let title = row[0]
+                let textField = app.textFields["todoTextField"]
+                XCTAssertTrue(textField.waitForExistence(timeout: 5))
+                textField.click()
+                textField.typeKey("a", modifierFlags: .command)
+                textField.typeText(title)
+
+                let addButton = app.buttons["addButton"]
+                XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+                addButton.click()
+            }
+        }
+
         // MARK: - When
 
         when("I enter \"([^\"]*)\" in the text field") { match in
@@ -68,6 +85,23 @@ final class TodoUITests: GherkinTestCase {
             let addButton = app.buttons["addButton"]
             XCTAssertTrue(addButton.waitForExistence(timeout: 5))
             addButton.click()
+        }
+
+        when("I update the todo at position (\\d+) to \"([^\"]*)\"") { match in
+            let app = TodoUITests.app!
+            let index = Int(match.captures[0])!
+            let newText = match.captures[1]
+
+            let editButton = app.buttons["editButton_\(index)"]
+            XCTAssertTrue(editButton.waitForExistence(timeout: 5))
+            editButton.click()
+
+            let editField = app.textFields["editTextField_\(index)"]
+            XCTAssertTrue(editField.waitForExistence(timeout: 5))
+            editField.click()
+            editField.typeKey("a", modifierFlags: .command)
+            editField.typeText(newText)
+            editField.typeKey(.return, modifierFlags: [])
         }
 
         when("I delete the todo at position (\\d+)") { match in

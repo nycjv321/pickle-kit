@@ -148,7 +148,6 @@ open class GherkinTestCase: XCTestCase {
     private static var scenarioMaps: [ObjectIdentifier: [String: (scenario: Scenario, background: Background?, feature: Feature)]] = [:]
 
     override open class var defaultTestSuite: XCTestSuite {
-        let suite = XCTestSuite(forTestCaseClass: self)
         let classId = ObjectIdentifier(self)
 
         // Parse features
@@ -202,7 +201,8 @@ open class GherkinTestCase: XCTestCase {
 
                 scenarioMaps[classId]?[selectorName] = (scenario, expanded.background, feature)
 
-                // Create a dynamic test method
+                // Add dynamic test method to the class. class_addMethod is a no-op
+                // if the selector already exists, so repeated calls are safe.
                 let sel = NSSelectorFromString(selectorName)
                 let block: @convention(block) (GherkinTestCase) -> Void = { testCase in
                     testCase.executeScenario(named: selectorName)
@@ -210,13 +210,15 @@ open class GherkinTestCase: XCTestCase {
                 let imp = imp_implementationWithBlock(block)
                 // "v@:" means void return, object self, selector _cmd
                 class_addMethod(self, sel, imp, "v@:")
-
-                if let testCase = makeTestCase(for: self, selector: sel) {
-                    suite.addTest(testCase)
-                }
             }
         }
 
+        // Create suite AFTER all dynamic methods are added to the class.
+        // XCTestSuite(forTestCaseClass:) discovers test_* methods via ObjC
+        // reflection, so it will find all dynamically added methods.
+        // This avoids duplicate test entries that can crash Xcode's result
+        // bundle builder when defaultTestSuite is called multiple times.
+        let suite = XCTestSuite(forTestCaseClass: self)
         return suite
     }
 

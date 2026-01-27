@@ -43,3 +43,17 @@ Feature: Todo basics
     Then the add button should be disabled
     When I enter "   " in the text field
     Then the add button should be disabled
+
+  Scenario Outline: Edit a todo
+    Given I have the following todos in my list:
+      | title                    |
+      | Buy organic groceries    |
+      | Walk the dog for an hour |
+    When I update the todo at position <index> to "<updated_value>"
+    Then I should see "<updated_value>" at position <index>
+    And the item count should be 2
+
+    Examples:
+      | index | updated_value            |
+      | 0     | Walk the dog for an hour |
+      | 1     | Read a book              |
