@@ -21,7 +21,9 @@ public struct StepMatch: Sendable {
 // MARK: - Step Handler
 
 /// A closure that executes a matched step.
-public typealias StepHandler = @Sendable (StepMatch) async throws -> Void
+/// Isolated to `@MainActor` so handlers can safely use XCTest assertions
+/// and UI frameworks that require the main thread.
+public typealias StepHandler = @MainActor @Sendable (StepMatch) async throws -> Void
 
 // MARK: - Registry Errors
 
@@ -42,9 +44,9 @@ public enum StepRegistryError: Error, LocalizedError, Equatable {
     }
 }
 
-// MARK: - Step Definition
+// MARK: - Registered Step Entry
 
-private struct StepDefinition: @unchecked Sendable {
+private struct RegisteredStepEntry: @unchecked Sendable {
     let pattern: String
     let regex: NSRegularExpression
     let handler: StepHandler
@@ -56,7 +58,7 @@ private struct StepDefinition: @unchecked Sendable {
 /// Instance-based (not singleton) for testability.
 public final class StepRegistry: @unchecked Sendable {
 
-    private var definitions: [StepDefinition] = []
+    private var definitions: [RegisteredStepEntry] = []
 
     /// Errors from invalid regex patterns passed during registration.
     public private(set) var registrationErrors: [StepRegistryError] = []
@@ -103,7 +105,7 @@ public final class StepRegistry: @unchecked Sendable {
     /// Throws if the step text matches multiple definitions (ambiguous).
     public func match(_ step: Step) throws -> (handler: StepHandler, match: StepMatch)? {
         let text = step.text
-        var matches: [(StepDefinition, [String])] = []
+        var matches: [(RegisteredStepEntry, [String])] = []
 
         for definition in definitions {
             let range = NSRange(text.startIndex..., in: text)
@@ -143,7 +145,7 @@ public final class StepRegistry: @unchecked Sendable {
         let anchored = "^\(pattern)$"
         do {
             let regex = try NSRegularExpression(pattern: anchored, options: [])
-            definitions.append(StepDefinition(pattern: pattern, regex: regex, handler: handler))
+            definitions.append(RegisteredStepEntry(pattern: pattern, regex: regex, handler: handler))
         } catch {
             registrationErrors.append(.invalidPattern(
                 pattern: pattern,

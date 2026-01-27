@@ -59,14 +59,14 @@ PickleKit covers the **E2E / acceptance** layer of the trophy — human-readable
 
 Valuable for pure logic and isolated components, but not the primary confidence driver. Use them where the input/output boundary is clear and no integration wiring is needed.
 
-- **Framework tests**: `ParserTests`, `StepRegistryTests`, `ScenarioRunnerTests`, `TagFilterTests`, `StepResultTests`, `HTMLReportGeneratorTests`
+- **Framework tests**: `ParserTests`, `StepRegistryTests`, `ScenarioRunnerTests`, `TagFilterTests`, `StepResultTests`, `StepDefinitionsTests`, `HTMLReportGeneratorTests`
 - **App tests**: `TodoStoreTests` — verifies add, remove, update, clear, toggle completion without any UI
 
 ### Integration Tests
 
 The sweet spot for confidence. These exercise real components working together and catch the class of bugs that unit tests miss: wiring errors, contract mismatches, and incorrect assumptions between layers.
 
-- `GherkinIntegrationTests` — a `GherkinTestCase` subclass that runs all fixture `.feature` files through the full parse → expand → register → run pipeline
+- `GherkinIntegrationTests` — a `GherkinTestCase` subclass that runs all fixture `.feature` files through the full parse → expand → register → run pipeline. Uses `stepDefinitionTypes` with 6 domain-specific `StepDefinitions` types (one per fixture feature file)
 - Most testing effort should go here. When in doubt about where to add a test, prefer an integration test over a unit test
 
 ### UI / Acceptance Tests (E2E)
@@ -87,15 +87,17 @@ These rules apply when writing `GherkinTestCase` subclasses that drive XCUITest.
 ```swift
 override func setUp() {
     super.setUp()
-    if Self.app == nil {
-        Self.app = XCUIApplication()
-        Self.app.launchArguments.append("-disableAnimations")
-        Self.app.launch()
+    if TodoWindow.app == nil {
+        TodoWindow.app = XCUIApplication()
+        TodoWindow.app.launchArguments.append("-disableAnimations")
+        TodoWindow.app.launch()
     } else {
-        Self.app.activate()
+        TodoWindow.app.activate()
     }
 }
 ```
+
+The app reference lives on the page object (`TodoWindow`) rather than the test class, so step definitions can access it without coupling to a specific `GherkinTestCase` subclass.
 
 ### Reset State via Background Steps, Not Relaunch
 
@@ -151,7 +153,7 @@ Use `Window` instead of `WindowGroup` for apps under UI test. `WindowGroup` can 
 
 ### `nonisolated(unsafe) static var app`
 
-`XCUIApplication` isn't `Sendable`, but `StepHandler` requires `@Sendable` closures. Storing the app as a `nonisolated(unsafe) static var` is safe because XCUITest runs scenarios sequentially — there is no concurrent access.
+`XCUIApplication` isn't `Sendable`, but `StepHandler` requires `@Sendable` closures. Storing the app as a `nonisolated(unsafe) static var` is safe because XCUITest runs scenarios sequentially — there is no concurrent access. `StepHandler` is also `@MainActor`, so all step handler code runs on the main thread where XCTest assertions and UI framework calls are safe.
 
 ## Continuous Integration
 

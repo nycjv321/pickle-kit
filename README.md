@@ -41,10 +41,43 @@ Feature: Calculator
 
 ### 2. Create a test class
 
+Define step definitions as types conforming to the `StepDefinitions` protocol. Each stored `StepDefinition` property is automatically discovered via reflection:
+
 ```swift
 import XCTest
 import PickleKit
 
+struct CalculatorSteps: StepDefinitions {
+    nonisolated(unsafe) static var result = 0
+    init() { Self.result = 0 }
+
+    let givenNumber = StepDefinition.given("I have the number (\\d+)") { match in
+        Self.result = Int(match.captures[0])!
+    }
+
+    let addNumber = StepDefinition.when("I add (\\d+)") { match in
+        Self.result += Int(match.captures[0])!
+    }
+
+    let checkResult = StepDefinition.then("the result should be (\\d+)") { match in
+        XCTAssertEqual(Self.result, Int(match.captures[0])!)
+    }
+}
+
+final class CalculatorTests: GherkinTestCase {
+    override class var featureSubdirectory: String? { "Features" }
+    override class var stepDefinitionTypes: [any StepDefinitions.Type] {
+        [CalculatorSteps.self]
+    }
+}
+```
+
+<details>
+<summary>Inline alternative (registerStepDefinitions)</summary>
+
+You can also register steps inline — both approaches work and can coexist:
+
+```swift
 final class CalculatorTests: GherkinTestCase {
     override class var featureSubdirectory: String? { "Features" }
 
@@ -66,6 +99,8 @@ final class CalculatorTests: GherkinTestCase {
     }
 }
 ```
+
+</details>
 
 ### 3. Run tests
 
@@ -112,11 +147,11 @@ Sources/PickleKit/
 ├── AST/                    # Feature, Scenario, Step, DataTable model types
 ├── Parser/                 # GherkinParser (state machine), OutlineExpander
 ├── Report/                 # HTML report generation (StepResult, HTMLReportGenerator, ReportResultCollector)
-├── Runner/                 # StepRegistry, ScenarioRunner, TagFilter
+├── Runner/                 # StepRegistry, StepDefinitions, ScenarioRunner, TagFilter
 └── XCTestBridge/           # GherkinTestCase (XCTest integration)
 ```
 
-All types are `Sendable`. Step handlers are `async throws`.
+All types are `Sendable`. Step handlers are `@MainActor async throws`.
 
 ## Requirements
 

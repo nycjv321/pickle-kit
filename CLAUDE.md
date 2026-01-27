@@ -22,6 +22,7 @@ Sources/PickleKit/
 │   └── ReportResultCollector.swift # Thread-safe result accumulator (OSAllocatedUnfairLock)
 ├── Runner/
 │   ├── StepRegistry.swift        # Regex pattern → async closure mapping
+│   ├── StepDefinitions.swift     # StepDefinition struct, StepDefinitions protocol, StepDefinitionFilter
 │   ├── ScenarioRunner.swift      # Executes scenarios against registry
 │   └── TagFilter.swift           # Include/exclude tag filtering
 └── XCTestBridge/
@@ -33,12 +34,13 @@ Sources/PickleKit/
 - **Zero dependencies** — only Foundation and XCTest (implicit for test targets)
 - **All AST types are `Sendable` and `Equatable`** — value types throughout
 - **`StepRegistry` is instance-based** (not singleton) for testability
-- **`StepHandler` is `@Sendable (StepMatch) async throws -> Void`** — async/await compatible
+- **`StepHandler` is `@MainActor @Sendable (StepMatch) async throws -> Void`** — async/await compatible, isolated to `@MainActor` so handlers safely use XCTest assertions and UI frameworks
 - **`GherkinTestCase` uses ObjC runtime** (`class_addMethod`, `unsafeBitCast`) to create dynamic test methods since `XCTestCase.init(selector:)` is unavailable in Swift. **Important:** `XCTestSuite(forTestCaseClass:)` must be called *after* all `class_addMethod` calls — it discovers `test_*` methods via ObjC reflection. Creating the suite first and then adding methods produces duplicate entries that can crash Xcode's result bundle builder.
 - **`DataTable.dataRows` always drops the first row** — it assumes the first row is a header. All data tables used with `dataRows` must include an explicit header row (e.g., `| title |`). Tables without a header will silently lose the first data row.
 - **Per-class scenario maps** — `GherkinTestCase` stores scenario data in a dictionary keyed by `ObjectIdentifier(self)` so multiple subclasses (and the base class itself when discovered by XCTest) don't overwrite each other's data
 - **`GherkinParser` is a line-by-line state machine** with states: idle → inFeature → inBackground/inScenario/inOutline/inExamples/inDocString
 - **Conditional compilation** — `GherkinTestCase` is wrapped in `#if canImport(XCTest) && canImport(ObjectiveC)`
+- **Reflection-based step registration** — `StepDefinitions` protocol uses `Mirror` to auto-discover stored `StepDefinition` properties. `GherkinTestCase.stepDefinitionTypes` enables declaring step providers per subclass. Type-based providers are registered before `registerStepDefinitions()`, so both approaches coexist.
 
 ### Platforms
 
@@ -52,6 +54,7 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 | `GherkinParser.swift` | Parses Gherkin source text/files/bundles into Feature AST |
 | `OutlineExpander.swift` | Expands ScenarioOutline + Examples into concrete Scenarios |
 | `StepRegistry.swift` | StepMatch, StepHandler, StepRegistryError, StepRegistry |
+| `StepDefinitions.swift` | StepDefinition (declarative step), StepDefinitions protocol (Mirror-based discovery), StepDefinitionFilter (env var filtering) |
 | `ScenarioRunner.swift` | ScenarioRunnerError, ScenarioResult, FeatureResult, ScenarioRunner |
 | `TagFilter.swift` | Include/exclude filtering on tag arrays |
 | `GherkinTestCase.swift` | XCTestCase subclass, dynamic test suite via ObjC runtime, report integration |
@@ -73,6 +76,7 @@ swift test --filter StepRegistryTests          # Registry tests only
 swift test --filter ScenarioRunnerTests        # Runner tests only
 swift test --filter StepResultTests            # Step result/timing tests
 swift test --filter HTMLReportGeneratorTests    # Report generation tests
+swift test --filter StepDefinitionsTests        # Step definitions struct/protocol/filter tests
 swift test --filter GherkinIntegrationTests    # Full pipeline integration tests
 PICKLE_REPORT=1 swift test                     # Run tests + generate HTML report
 
@@ -91,8 +95,9 @@ Tests/PickleKitTests/
 ├── ScenarioRunnerTests.swift      # Execution: passing/failing scenarios, backgrounds, tag filtering, captures
 ├── TagFilterTests.swift           # Include/exclude logic, priority, edge cases
 ├── StepResultTests.swift          # Step-level results: status, timing, tags, undefined/skipped, backward compat
+├── StepDefinitionsTests.swift     # StepDefinition struct, StepDefinitions protocol, Mirror discovery, filter
 ├── HTMLReportGeneratorTests.swift # HTML generation: structure, counts, CSS classes, escaping, collector, aggregations
-├── GherkinIntegrationTests.swift  # Full pipeline: GherkinTestCase subclass running all fixture features
+├── GherkinIntegrationTests.swift  # Full pipeline: domain step types + stepDefinitionTypes
 └── Fixtures/                      # .feature files loaded via Bundle.module
     ├── basic.feature
     ├── with_background.feature
@@ -147,6 +152,14 @@ XCTAssertEqual(result?.match.captures, ["42", "apples"])
 4. Update `finalizeCurrentScenario()` / `finalizeState()` if needed
 5. Create a fixture `.feature` file and add parser tests
 
+### Adding a step definition type
+
+1. Create a struct conforming to `StepDefinitions` in a test file
+2. Declare steps as stored `let` properties using `StepDefinition.given/when/then/step`
+3. Own static state in `nonisolated(unsafe) static var` properties, reset in `init()`
+4. Add the type to `stepDefinitionTypes` in the `GherkinTestCase` subclass
+5. Test with `StepDefinitionsTests` patterns
+
 ### Modifying step matching behavior
 
 1. Changes go in `StepRegistry.swift`
@@ -184,6 +197,29 @@ let result = try await runner.run(feature: expanded, tagFilter: TagFilter(exclud
 // CUCUMBER_EXCLUDE_TAGS=wip,slow swift test
 let envFilter = TagFilter.fromEnvironment()        // reads CUCUMBER_TAGS / CUCUMBER_EXCLUDE_TAGS
 let merged = existingFilter.merging(envFilter!)     // unions include and exclude sets
+
+// Declarative step definitions (type-based, Mirror-discovered)
+struct ArithmeticSteps: StepDefinitions {
+    nonisolated(unsafe) static var number: Int = 0
+    init() { Self.number = 0 }  // reset per-scenario
+
+    let givenNumber = StepDefinition.given("I have the number (\\d+)") { match in
+        Self.number = Int(match.captures[0])!
+    }
+    let addNumber = StepDefinition.when("I add (\\d+)") { match in
+        Self.number += Int(match.captures[0])!
+    }
+}
+
+// Use stepDefinitionTypes in a GherkinTestCase subclass
+final class MyTests: GherkinTestCase {
+    override class var stepDefinitionTypes: [any StepDefinitions.Type] {
+        [ArithmeticSteps.self]
+    }
+}
+
+// Filter step definition types via environment variable
+// CUCUMBER_STEP_DEFINITIONS="ArithmeticSteps,CartSteps" swift test
 ```
 
 ## HTML Report Generation
@@ -298,7 +334,12 @@ Example/TodoApp/
 │   └── TodoStoreTests.swift       # Unit tests for TodoStore (no UI dependency)
 └── UITests/
     ├── Features/                  # 3 Gherkin feature files
-    └── TodoUITests.swift          # GherkinTestCase subclass + step definitions
+    ├── Steps/
+    │   ├── TodoSetupSteps.swift       # Given steps (app launch, empty list, seed data)
+    │   ├── TodoActionSteps.swift      # When steps (enter text, tap, edit, delete, toggle)
+    │   └── TodoVerificationSteps.swift # Then steps (assertions on text, count, state)
+    ├── TodoWindow.swift               # Page object: element accessors + UI actions
+    └── TodoUITests.swift              # GherkinTestCase subclass (config only)
 ```
 
 ### Running
@@ -340,7 +381,9 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 - **`@Observable TodoStore`** — Extracted store for testability. `@State` in `App`, plain `var` in `ContentView`. Enables `TodoStoreTests` without UI.
 - **`Window` instead of `WindowGroup`** — Prevents duplicate windows from URL handling. `WindowGroup` creates a new window per `onOpenURL` event.
 - **`todoapp://seed` URL scheme** — Bypasses UI for fast, deterministic test setup. `onOpenURL` handler calls `store.clear()` + `store.add(titles:)` from JSON query parameter.
-- **`nonisolated(unsafe) static var app: XCUIApplication!`** — XCUIApplication isn't Sendable, but StepHandler requires @Sendable closures. Safe because XCUITest runs sequentially.
+- **`nonisolated(unsafe) static var app: XCUIApplication!`** — XCUIApplication isn't Sendable, but StepHandler requires @Sendable closures. Safe because XCUITest runs sequentially. Stored on `TodoWindow` (the page object) rather than on the test class.
+- **Page Object pattern** — `TodoWindow` encapsulates all element accessors and UI actions. Step definitions delegate to `TodoWindow` methods, keeping step handler bodies minimal.
+- **`StepDefinitions` types** — Step handlers are organized into `TodoSetupSteps`, `TodoActionSteps`, and `TodoVerificationSteps`, registered via `stepDefinitionTypes`. The test class (`TodoUITests`) contains only configuration.
 - **App reuse across scenarios** — `setUp()` launches only once (`app == nil`), then reuses via `activate()`. Each scenario starts with a clean state via the "the todo list is empty" background step (clicks "Clear All").
 - **Index-based accessibility identifiers** (`todoText_0`, `deleteButton_1`, `editButton_0`, `editTextField_0`) — deterministic IDs for ForEach with enumerated array.
 - **`waitForExistence(timeout: 5)`** — all element queries use this to avoid flakiness.
@@ -350,8 +393,8 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 ## Concurrency Notes
 
 - All AST types are `Sendable` value types
-- `StepHandler` is `@Sendable ... async throws` — handlers run in async context
+- `StepHandler` is `@MainActor @Sendable ... async throws` — handlers run on the main thread, safe for XCTest assertions and UI frameworks
 - `StepRegistry` is `@unchecked Sendable` — not thread-safe for concurrent registration, but safe for concurrent matching after setup
-- `ScenarioRunner` is `Sendable` — safe to use from any context
-- `GherkinTestCase` runs scenarios with `Task` + `waitForExpectations` to bridge XCTest's sync test methods with async step handlers
+- `ScenarioRunner` is `Sendable` — safe to use from any context. When it calls `await handler(match)`, the runtime hops to the main actor because `StepHandler` is `@MainActor`
+- `GherkinTestCase` runs scenarios with `Task { @MainActor in }` + `waitForExpectations` to bridge XCTest's sync test methods with async step handlers. `waitForExpectations` pumps the main run loop, which services `@MainActor` handler hops
 - Test warnings about `SendableClosureCaptures` in test files are expected (test-only mutable state in closures)

@@ -45,7 +45,9 @@ targets:
     type: bundle.ui-testing
     platform: macOS
     sources:
-      - path: UITests/TodoUITests.swift
+      - path: UITests
+        excludes:
+          - "Features/**"
       - path: UITests/Features
         buildPhase: resources
         type: folder

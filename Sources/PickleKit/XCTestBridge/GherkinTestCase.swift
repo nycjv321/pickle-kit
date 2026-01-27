@@ -37,6 +37,17 @@ open class GherkinTestCase: XCTestCase {
     /// Optional tag filter. Override to include/exclude scenarios by tags.
     open class var tagFilter: TagFilter? { nil }
 
+    /// Feature file paths to load (filesystem paths).
+    /// Supports file paths, directory paths, and `file:line` syntax.
+    /// When non-nil, overrides `featureBundle`/`featureSubdirectory`.
+    /// Set `CUCUMBER_FEATURES` env var for runtime control (space-separated).
+    open class var featurePaths: [String]? { nil }
+
+    /// Step definition types to instantiate and register for each scenario.
+    /// These are registered before `registerStepDefinitions()` is called,
+    /// enabling both approaches to coexist.
+    open class var stepDefinitionTypes: [any StepDefinitions.Type] { [] }
+
     /// Whether HTML report generation is enabled. Reads `PICKLE_REPORT` env var.
     /// Override in subclass for compile-time control.
     open class var reportEnabled: Bool {
@@ -155,8 +166,21 @@ open class GherkinTestCase: XCTestCase {
         let expander = OutlineExpander()
 
         let features: [Feature]
+        var lineFilters: [String: Set<Int>] = [:]
         do {
-            features = try parser.parseBundle(bundle: featureBundle, subdirectory: featureSubdirectory)
+            // Priority: env var > class property > bundle
+            if let envPaths = FeaturePath.fromEnvironment() {
+                let result = try parser.parsePaths(envPaths)
+                features = result.features
+                lineFilters = result.lineFilters
+            } else if let pathSpecs = featurePaths {
+                let featurePathValues = pathSpecs.compactMap { FeaturePath.parse($0) }
+                let result = try parser.parsePaths(featurePathValues)
+                features = result.features
+                lineFilters = result.lineFilters
+            } else {
+                features = try parser.parseBundle(bundle: featureBundle, subdirectory: featureSubdirectory)
+            }
         } catch {
             // Create a single failing test to report the parse error
             let errorSuite = XCTestSuite(name: String(describing: self))
@@ -194,6 +218,13 @@ open class GherkinTestCase: XCTestCase {
                     if !filter.shouldInclude(tags: allTags) {
                         continue
                     }
+                }
+
+                // Apply line filter
+                if let sourceFile = expanded.sourceFile,
+                   let allowedLines = lineFilters[sourceFile],
+                   !scenarioMatchesLines(scenario, allowedLines: allowedLines, feature: expanded) {
+                    continue
                 }
 
                 let methodName = sanitizeMethodName(scenario.name)
@@ -261,6 +292,18 @@ open class GherkinTestCase: XCTestCase {
 
         // Register step definitions
         registry.reset()
+
+        // Register steps from type-based providers
+        var stepTypes = type(of: self).stepDefinitionTypes
+        if let envFilter = StepDefinitionFilter.fromEnvironment() {
+            stepTypes = stepTypes.filter { envFilter.contains(String(describing: $0)) }
+        }
+        for stepType in stepTypes {
+            let provider = stepType.init()
+            provider.register(in: registry)
+        }
+
+        // Then register inline steps (backward compatibility)
         registerStepDefinitions()
 
         if !registry.registrationErrors.isEmpty {
@@ -275,7 +318,7 @@ open class GherkinTestCase: XCTestCase {
         // Use XCTest async support
         let expectation = self.expectation(description: "Scenario: \(scenario.name)")
 
-        Task {
+        Task { @MainActor in
             do {
                 let result = try await runner.run(
                     scenario: scenario,
@@ -320,6 +363,34 @@ open class GherkinTestCase: XCTestCase {
             }
         }
         return "Scenario '\(scenario.name)' failed: \(error.localizedDescription)"
+    }
+
+    /// Determines whether a scenario matches any of the allowed line numbers.
+    ///
+    /// A scenario matches a line if the line falls within its definition range.
+    /// The range is from the scenario's `sourceLine` to just before the next
+    /// scenario's `sourceLine` (or end of file). This handles exact scenario
+    /// lines, step lines within the scenario, and tag lines above it.
+    ///
+    /// For Scenario Outlines, all expanded scenarios share the original outline's
+    /// `sourceLine`, so `file:line` pointing at an outline selects all expanded rows.
+    private static func scenarioMatchesLines(
+        _ scenario: Scenario,
+        allowedLines: Set<Int>,
+        feature: Feature
+    ) -> Bool {
+        // Collect all scenario source lines from the feature, sorted.
+        let allSourceLines = feature.scenarios.map(\.sourceLine).sorted()
+
+        for line in allowedLines {
+            // Find the scenario whose sourceLine is the largest value <= line
+            if let matchedLine = allSourceLines.last(where: { $0 <= line }) {
+                if matchedLine == scenario.sourceLine {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private static func sanitizeMethodName(_ name: String) -> String {

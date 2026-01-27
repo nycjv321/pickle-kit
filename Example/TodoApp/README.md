@@ -176,7 +176,12 @@ Example/TodoApp/
     │   ├── todo_basics.feature        # CRUD, edit, and empty state (5 scenarios + 1 outline, @smoke)
     │   ├── todo_completion.feature    # Toggle completion (3 scenarios)
     │   └── todo_batch.feature         # Data tables, outlines, tags (4+1 scenarios, @smoke)
-    └── TodoUITests.swift              # GherkinTestCase subclass + step definitions
+    ├── Steps/
+    │   ├── TodoSetupSteps.swift       # Given steps (app launch, empty list, seed data)
+    │   ├── TodoActionSteps.swift      # When steps (enter text, tap, edit, delete, toggle)
+    │   └── TodoVerificationSteps.swift # Then steps (assertions on text, count, state)
+    ├── TodoWindow.swift               # Page object: element accessors + UI actions
+    └── TodoUITests.swift              # GherkinTestCase subclass (config only)
 ```
 
 Three targets: **TodoApp** (application), **TodoAppTests** (unit tests), **TodoAppUITests** (UI tests with PickleKit).
@@ -208,7 +213,7 @@ When this URL is opened, the handler calls `store.clear()` followed by `store.ad
 3. At test suite load time, `GherkinTestCase` parses all `.feature` files from the `Features` folder
 4. Each scenario is expanded (Scenario Outlines become concrete scenarios) and filtered by tags
 5. Each surviving scenario becomes a dynamic XCTest method via ObjC runtime
-6. When a test runs, `setUp()` launches the app (first scenario) or activates it (subsequent scenarios), `registerStepDefinitions()` registers step handlers, and the scenario's steps execute in order
+6. When a test runs, `setUp()` launches the app (first scenario) or activates it (subsequent scenarios), `stepDefinitionTypes` registers step handlers from `TodoSetupSteps`, `TodoActionSteps`, and `TodoVerificationSteps`, and the scenario's steps execute in order. Steps interact with the app through `TodoWindow`, a page object encapsulating all element access and UI actions
 7. Step handlers use `XCUIApplication` to interact with the app via accessibility identifiers
 8. The `Background` step "the todo list is empty" clears all todos via the Clear All button, so each scenario starts from a clean state without relaunching the app
 
@@ -308,21 +313,20 @@ Scenario: Drag to reorder todos
 
 ### Add a step definition
 
-In `TodoUITests.swift`, inside `registerStepDefinitions()`:
+Add a `StepDefinition` property to the appropriate `StepDefinitions` type in `UITests/Steps/`. Use `TodoSetupSteps` for Given steps, `TodoActionSteps` for When steps, and `TodoVerificationSteps` for Then steps:
 
 ```swift
-// Pattern is a regex. Capture groups become match.captures[0], [1], etc.
-when("I do something with \"([^\"]*)\"") { match in
-    let app = TodoUITests.app!
+// In TodoActionSteps.swift — pattern is a regex, captures become match.captures[0], [1], etc.
+let doSomething: StepDefinition = .when("I do something with \"([^\"]*)\"") { match in
     let value = match.captures[0]
-    // Use XCUIApplication APIs to interact with the app
-    let element = app.buttons[value]
+    // Use TodoWindow for element access and UI actions
+    let element = TodoWindow.app.buttons[value]
     XCTAssertTrue(element.waitForExistence(timeout: 5))
     element.click()
 }
 ```
 
-Use `given()`, `when()`, `then()` for keyword-specific steps, or `step()` for keyword-agnostic matching.
+Use `.given()`, `.when()`, `.then()` for keyword-specific steps, or `.step()` for keyword-agnostic matching. For new element accessors or multi-step interactions, add them to `TodoWindow.swift`.
 
 ## HTML Test Reports
 

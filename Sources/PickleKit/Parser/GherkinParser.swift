@@ -68,6 +68,66 @@ public final class GherkinParser: Sendable {
         }
     }
 
+    /// Parse a .feature file, storing the full filesystem path in `Feature.sourceFile`.
+    ///
+    /// Unlike `parseFile(at:)` which stores only the last path component,
+    /// this method preserves the full path so line filtering can correlate files.
+    public func parseFileStoringFullPath(at path: String) throws -> Feature {
+        let source = try String(contentsOfFile: path, encoding: .utf8)
+        return try parse(source: source, fileName: path)
+    }
+
+    /// Parse all .feature files in a directory (non-recursive), sorted alphabetically.
+    public func parseDirectory(at path: String) throws -> [Feature] {
+        let fm = FileManager.default
+        let contents = try fm.contentsOfDirectory(atPath: path)
+        let featureFiles = contents
+            .filter { $0.hasSuffix(".feature") }
+            .sorted()
+        return try featureFiles.map { fileName in
+            let fullPath = (path as NSString).appendingPathComponent(fileName)
+            return try parseFileStoringFullPath(at: fullPath)
+        }
+    }
+
+    /// Parse an array of `FeaturePath` values, dispatching to file or directory parsing.
+    ///
+    /// - Returns: A tuple of deduplicated features and a dictionary mapping absolute
+    ///   file paths to sets of target line numbers (for `file:line` filtering).
+    public func parsePaths(_ paths: [FeaturePath]) throws -> (features: [Feature], lineFilters: [String: Set<Int>]) {
+        var seenPaths = Set<String>()
+        var features: [Feature] = []
+        var lineFilters: [String: Set<Int>] = [:]
+
+        for featurePath in paths {
+            if featurePath.isDirectory {
+                let dirFeatures = try parseDirectory(at: featurePath.path)
+                for feature in dirFeatures {
+                    if let sourceFile = feature.sourceFile, seenPaths.insert(sourceFile).inserted {
+                        features.append(feature)
+                    }
+                }
+            } else {
+                let resolvedPath = featurePath.path
+                guard seenPaths.insert(resolvedPath).inserted else {
+                    // Already parsed this file; just merge line filters
+                    if !featurePath.lines.isEmpty {
+                        lineFilters[resolvedPath, default: []].formUnion(featurePath.lines)
+                    }
+                    continue
+                }
+                let feature = try parseFileStoringFullPath(at: resolvedPath)
+                features.append(feature)
+
+                if !featurePath.lines.isEmpty {
+                    lineFilters[resolvedPath, default: []].formUnion(featurePath.lines)
+                }
+            }
+        }
+
+        return (features, lineFilters)
+    }
+
     // MARK: - State Machine
 
     private enum ParseMode {
