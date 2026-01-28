@@ -1,5 +1,10 @@
 import Testing
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import PickleKit
 
 /// Tests for `GherkinTestScenario` — the Swift Testing bridge that loads Gherkin features
@@ -230,5 +235,103 @@ struct GherkinTestScenarioTests {
         for test in scenarios {
             #expect(test.scenario.steps.count == 3)
         }
+    }
+
+    // MARK: - Automatic Report Collection (PICKLE_REPORT)
+
+    @Test func autoCollectsWhenPickleReportSet() async throws {
+        GherkinTestScenario.resultCollector.reset()
+        unsetenv("PICKLE_REPORT")
+        defer {
+            unsetenv("PICKLE_REPORT")
+            GherkinTestScenario.resultCollector.reset()
+        }
+
+        setenv("PICKLE_REPORT", "1", 1)
+
+        let scenarios = try loadScenarios(
+            bundle: Bundle.module,
+            subdirectory: "Fixtures",
+            tagFilter: TagFilter(includeTags: ["fast"])
+        )
+        let test = try #require(scenarios.first)
+
+        // Run without explicit collector — should auto-collect
+        try await test.run(stepDefinitions: [TaggedSteps.self])
+
+        let testRun = GherkinTestScenario.resultCollector.buildTestRunResult()
+        #expect(testRun.featureResults.count == 1)
+        #expect(testRun.featureResults[0].scenarioResults.count == 1)
+        #expect(testRun.featureResults[0].scenarioResults[0].scenarioName == "Quick check")
+    }
+
+    @Test func noAutoCollectWhenPickleReportUnset() async throws {
+        GherkinTestScenario.resultCollector.reset()
+        unsetenv("PICKLE_REPORT")
+        defer {
+            unsetenv("PICKLE_REPORT")
+            GherkinTestScenario.resultCollector.reset()
+        }
+
+        let scenarios = try loadScenarios(
+            bundle: Bundle.module,
+            subdirectory: "Fixtures",
+            tagFilter: TagFilter(includeTags: ["fast"])
+        )
+        let test = try #require(scenarios.first)
+
+        // Run without PICKLE_REPORT — shared collector should remain empty
+        try await test.run(stepDefinitions: [TaggedSteps.self])
+
+        let testRun = GherkinTestScenario.resultCollector.buildTestRunResult()
+        #expect(testRun.featureResults.isEmpty)
+    }
+
+    @Test func explicitCollectorTakesPrecedenceOverAutoReport() async throws {
+        GherkinTestScenario.resultCollector.reset()
+        unsetenv("PICKLE_REPORT")
+        defer {
+            unsetenv("PICKLE_REPORT")
+            GherkinTestScenario.resultCollector.reset()
+        }
+
+        setenv("PICKLE_REPORT", "1", 1)
+
+        let scenarios = try loadScenarios(
+            bundle: Bundle.module,
+            subdirectory: "Fixtures",
+            tagFilter: TagFilter(includeTags: ["fast"])
+        )
+        let test = try #require(scenarios.first)
+
+        // Run with explicit collector — shared collector should NOT receive the result
+        let explicitCollector = ReportResultCollector()
+        try await test.run(stepDefinitions: [TaggedSteps.self], reportCollector: explicitCollector)
+
+        let explicitRun = explicitCollector.buildTestRunResult()
+        #expect(explicitRun.featureResults.count == 1)
+
+        let sharedRun = GherkinTestScenario.resultCollector.buildTestRunResult()
+        #expect(sharedRun.featureResults.isEmpty)
+    }
+
+    @Test func reportEnabledReadsEnvironment() {
+        unsetenv("PICKLE_REPORT")
+        defer { unsetenv("PICKLE_REPORT") }
+
+        #expect(!GherkinTestScenario.reportEnabled)
+
+        setenv("PICKLE_REPORT", "1", 1)
+        #expect(GherkinTestScenario.reportEnabled)
+    }
+
+    @Test func reportOutputPathReadsEnvironment() {
+        unsetenv("PICKLE_REPORT_PATH")
+        defer { unsetenv("PICKLE_REPORT_PATH") }
+
+        #expect(GherkinTestScenario.reportOutputPath == "pickle-report.html")
+
+        setenv("PICKLE_REPORT_PATH", "custom/report.html", 1)
+        #expect(GherkinTestScenario.reportOutputPath == "custom/report.html")
     }
 }

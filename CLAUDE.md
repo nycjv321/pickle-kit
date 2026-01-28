@@ -24,7 +24,8 @@ Sources/PickleKit/
 │   ├── StepRegistry.swift        # Regex pattern → async closure mapping
 │   ├── StepDefinitions.swift     # StepDefinition struct, StepDefinitions protocol, StepDefinitionFilter
 │   ├── ScenarioRunner.swift      # Executes scenarios against registry
-│   └── TagFilter.swift           # Include/exclude tag filtering
+│   ├── TagFilter.swift           # Include/exclude tag filtering
+│   └── ScenarioNameFilter.swift  # Filter scenarios by name (CUCUMBER_SCENARIOS env var)
 ├── SwiftTestingBridge/
 │   └── GherkinTestScenario.swift # Swift Testing bridge via @Test(arguments:)
 └── XCTestBridge/
@@ -60,7 +61,8 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 | `StepDefinitions.swift` | StepDefinition (declarative step), StepDefinitions protocol (Mirror-based discovery), StepDefinitionFilter (env var filtering) |
 | `ScenarioRunner.swift` | ScenarioRunnerError, ScenarioResult, FeatureResult, ScenarioRunner |
 | `TagFilter.swift` | Include/exclude filtering on tag arrays |
-| `GherkinTestScenario.swift` | Swift Testing bridge: `@Test(arguments:)` parameterized scenarios |
+| `ScenarioNameFilter.swift` | Filter scenarios by name via `CUCUMBER_SCENARIOS` env var |
+| `GherkinTestScenario.swift` | Swift Testing bridge: `@Test(arguments:)` parameterized scenarios, auto-report via `PICKLE_REPORT` |
 | `GherkinTestCase.swift` | XCTestCase subclass, dynamic test suite via ObjC runtime, report integration |
 | `StepResult.swift` | StepStatus enum, StepResult per-step execution data |
 | `TestRunResult.swift` | Aggregated test run result with feature/scenario/step counts |
@@ -83,6 +85,7 @@ swift test --filter ScenarioRunnerTests        # Runner tests only
 swift test --filter StepResultTests            # Step result/timing tests
 swift test --filter HTMLReportGeneratorTests    # Report generation tests
 swift test --filter StepDefinitionsTests        # Step definitions struct/protocol/filter tests
+swift test --filter ScenarioNameFilterTests     # Scenario name filter tests
 swift test --filter GherkinIntegrationTests    # Full pipeline integration tests
 swift test --filter GherkinTestScenarioTests   # Swift Testing bridge tests
 swift test --filter GherkinTestCaseTests        # XCTest bridge tests
@@ -102,11 +105,12 @@ Tests/PickleKitTests/
 ├── StepRegistryTests.swift            # Pattern matching: regex captures, ambiguity, anchoring, data passthrough
 ├── ScenarioRunnerTests.swift          # Execution: passing/failing scenarios, backgrounds, tag filtering, captures
 ├── TagFilterTests.swift               # Include/exclude logic, priority, edge cases
+├── ScenarioNameFilterTests.swift     # Scenario name filtering, env var parsing, merging
 ├── StepResultTests.swift              # Step-level results: status, timing, tags, undefined/skipped, backward compat
 ├── StepDefinitionsTests.swift         # StepDefinition struct, StepDefinitions protocol, Mirror discovery, filter
 ├── HTMLReportGeneratorTests.swift     # HTML generation: structure, counts, CSS classes, escaping, collector, aggregations
 ├── GherkinIntegrationTests.swift      # Full pipeline: domain step types + GherkinTestScenario
-├── GherkinTestScenarioTests.swift     # Swift Testing bridge: loading, filtering, execution, properties
+├── GherkinTestScenarioTests.swift     # Swift Testing bridge: loading, filtering, execution, properties, auto-report
 ├── GherkinTestCaseTests.swift         # XCTest bridge: dynamic suites, tag filtering, isolation, registry
 └── Fixtures/                          # .feature files loaded via Bundle.module
     ├── basic.feature
@@ -252,6 +256,12 @@ let result = try await runner.run(feature: expanded, tagFilter: TagFilter(exclud
 let envFilter = TagFilter.fromEnvironment()        // reads CUCUMBER_TAGS / CUCUMBER_EXCLUDE_TAGS
 let merged = existingFilter.merging(envFilter!)     // unions include and exclude sets
 
+// CLI scenario name filtering (case-insensitive, comma-separated)
+// CUCUMBER_SCENARIOS="Addition,Subtraction" swift test
+// With xcodebuild, use TEST_RUNNER_ prefix:
+// TEST_RUNNER_CUCUMBER_SCENARIOS="Addition" xcodebuild test ...
+let nameFilter = ScenarioNameFilter.fromEnvironment()  // reads CUCUMBER_SCENARIOS
+
 // Declarative step definitions (type-based, Mirror-discovered)
 struct ArithmeticSteps: StepDefinitions {
     nonisolated(unsafe) static var number: Int = 0
@@ -266,6 +276,7 @@ struct ArithmeticSteps: StepDefinitions {
 }
 
 // Swift Testing bridge (preferred for library/unit tests)
+// PICKLE_REPORT=1 auto-collects results when no explicit reportCollector is passed.
 import Testing
 import PickleKit
 
@@ -288,6 +299,13 @@ final class MyUITests: GherkinTestCase {
     }
 }
 
+// Compile-time scenario name filter (XCTest bridge)
+final class MyFilteredUITests: GherkinTestCase {
+    override class var scenarioNameFilter: ScenarioNameFilter? {
+        ScenarioNameFilter(names: ["My specific scenario"])
+    }
+}
+
 // Filter step definition types via environment variable
 // CUCUMBER_STEP_DEFINITIONS="ArithmeticSteps,CartSteps" swift test
 ```
@@ -299,9 +317,12 @@ PickleKit generates Cucumber-style HTML reports with step-level results, timing,
 ### How It Works
 
 1. `ScenarioRunner.run()` captures per-step timing and builds `[StepResult]` arrays — each step gets `.passed`, `.failed`, `.undefined`, or `.skipped` status
-2. `GherkinTestCase.executeScenario()` records each `ScenarioResult` into a shared `ReportResultCollector` (when `reportEnabled`)
-3. Reports are written via two mechanisms: `class func tearDown()` (after each `GherkinTestCase` subclass finishes) and an `atexit` handler (process exit). The `tearDown` approach ensures reports work under `xcodebuild` where the test runner may be killed before `atexit` fires
+2. Both bridges auto-collect results when `PICKLE_REPORT` is set:
+   - **XCTest bridge:** `GherkinTestCase.executeScenario()` records each `ScenarioResult` into a shared `ReportResultCollector`
+   - **Swift Testing bridge:** `GherkinTestScenario.run()` auto-collects into its own shared `resultCollector` when no explicit collector is passed
+3. Reports are written via `atexit` handlers (both bridges). `GherkinTestCase` additionally writes from `class func tearDown()` — this ensures reports work under `xcodebuild` where the test runner may be killed before `atexit` fires
 4. `HTMLReportGenerator.write(result:to:)` creates intermediate directories automatically — `build/report.html` works even if `build/` doesn't exist
+5. Each bridge maintains its own `ReportResultCollector`. When both bridges run in the same process, each writes its report (last write wins for the same output path)
 
 ### Configuration
 
@@ -310,12 +331,14 @@ PickleKit generates Cucumber-style HTML reports with step-level results, timing,
 | `PICKLE_REPORT` | *(unset = off)* | Set to any value to enable |
 | `PICKLE_REPORT_PATH` | `pickle-report.html` | Output file path (ineffective for sandboxed UI test runners) |
 
+Both bridges (`GherkinTestCase` and `GherkinTestScenario`) honor these env vars. `swift test` passes env vars to the test process directly, so this works for both XCTest and Swift Testing suites:
+
 ```bash
 PICKLE_REPORT=1 swift test
 PICKLE_REPORT=1 PICKLE_REPORT_PATH=build/report.html swift test
 ```
 
-Subclasses can override `reportEnabled` / `reportOutputPath` class properties for compile-time control.
+`GherkinTestCase` subclasses can override `reportEnabled` / `reportOutputPath` class properties for compile-time control. `GherkinTestScenario` exposes `reportEnabled` and `reportOutputPath` as static read-only properties.
 
 ### Key Types
 
@@ -342,10 +365,17 @@ let result = TestRunResult(featureResults: [...], startTime: start, endTime: Dat
 let generator = HTMLReportGenerator()
 try generator.write(result: result, to: "report.html")
 
-// Incremental collection
+// Incremental collection (explicit)
 let collector = ReportResultCollector()
 collector.record(scenarioResult: result, featureName: "Login", featureTags: ["auth"])
 let testRun = collector.buildTestRunResult()
+
+// Auto-collection via PICKLE_REPORT env var (Swift Testing bridge)
+// When PICKLE_REPORT is set and no explicit collector is passed,
+// GherkinTestScenario.run() auto-collects into the shared collector.
+let result = try await test.run(stepDefinitions: [MySteps.self])
+// Access shared collector programmatically:
+let sharedRun = GherkinTestScenario.resultCollector.buildTestRunResult()
 ```
 
 ## CI/CD
@@ -465,6 +495,7 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 - **`waitForExistence(timeout: 5)`** — all element queries use this to avoid flakiness.
 - **Local package dependency** — `project.yml` references PickleKit via `path: ../..`.
 - **Tag filtering** — `tagFilter` override excludes `@wip`; `CUCUMBER_TAGS` env var for CLI filtering.
+- **Scenario name filtering** — `scenarioNameFilter` override or `CUCUMBER_SCENARIOS` env var for name-based filtering. With xcodebuild, use `TEST_RUNNER_CUCUMBER_SCENARIOS` (the `TEST_RUNNER_` prefix is stripped by xcodebuild).
 
 ## Concurrency Notes
 

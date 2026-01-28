@@ -52,7 +52,8 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
     public static func scenarios(
         bundle: Bundle,
         subdirectory: String? = nil,
-        tagFilter: TagFilter? = nil
+        tagFilter: TagFilter? = nil,
+        scenarioNameFilter: ScenarioNameFilter? = nil
     ) -> [GherkinTestScenario] {
         let parser = GherkinParser()
         let features: [Feature]
@@ -61,7 +62,7 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
         } catch {
             return []
         }
-        return buildScenarios(from: features, tagFilter: tagFilter)
+        return buildScenarios(from: features, tagFilter: tagFilter, scenarioNameFilter: scenarioNameFilter)
     }
 
     // MARK: - Loading from Filesystem Paths
@@ -74,7 +75,8 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
     /// - Returns: An array of test scenarios ready for `@Test(arguments:)`.
     public static func scenarios(
         paths: [String],
-        tagFilter: TagFilter? = nil
+        tagFilter: TagFilter? = nil,
+        scenarioNameFilter: ScenarioNameFilter? = nil
     ) -> [GherkinTestScenario] {
         let parser = GherkinParser()
         let featurePaths = paths.compactMap { FeaturePath.parse($0) }
@@ -85,7 +87,62 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
         } catch {
             return []
         }
-        return buildScenarios(from: features, tagFilter: tagFilter)
+        return buildScenarios(from: features, tagFilter: tagFilter, scenarioNameFilter: scenarioNameFilter)
+    }
+
+    // MARK: - Report Collection
+
+    /// Shared result collector for HTML report generation across all `GherkinTestScenario` runs.
+    nonisolated(unsafe) private static var _resultCollector = ReportResultCollector()
+    nonisolated(unsafe) private static var _atexitRegistered = false
+
+    /// The shared result collector. Accessible for programmatic use.
+    public static var resultCollector: ReportResultCollector { _resultCollector }
+
+    /// Whether HTML report generation is enabled. Reads `PICKLE_REPORT` env var.
+    public static var reportEnabled: Bool {
+        ProcessInfo.processInfo.environment["PICKLE_REPORT"] != nil
+    }
+
+    /// Output path for the HTML report. Reads `PICKLE_REPORT_PATH` env var.
+    public static var reportOutputPath: String {
+        ProcessInfo.processInfo.environment["PICKLE_REPORT_PATH"] ?? "pickle-report.html"
+    }
+
+    /// Write the collected report to disk.
+    private static func writeReportIfNeeded() {
+        let result = _resultCollector.buildTestRunResult()
+        guard !result.featureResults.isEmpty else { return }
+        let rawPath = ProcessInfo.processInfo.environment["PICKLE_REPORT_PATH"] ?? "pickle-report.html"
+        let absolutePath: String
+        if rawPath.hasPrefix("/") {
+            absolutePath = rawPath
+        } else {
+            let cwd = FileManager.default.currentDirectoryPath
+            absolutePath = (cwd as NSString).appendingPathComponent(rawPath)
+        }
+        let generator = HTMLReportGenerator()
+        do {
+            try generator.write(result: result, to: absolutePath)
+            fputs("PickleKit: HTML report written to \(absolutePath)\n", stderr)
+        } catch {
+            let fallbackPath = (NSTemporaryDirectory() as NSString)
+                .appendingPathComponent((rawPath as NSString).lastPathComponent)
+            do {
+                try generator.write(result: result, to: fallbackPath)
+                fputs("PickleKit: HTML report written to \(fallbackPath)\n", stderr)
+            } catch {
+                fputs("PickleKit: Failed to write report: \(error.localizedDescription)\n", stderr)
+            }
+        }
+    }
+
+    private static func ensureAtexitRegistered() {
+        guard !_atexitRegistered else { return }
+        _atexitRegistered = true
+        atexit {
+            GherkinTestScenario.writeReportIfNeeded()
+        }
     }
 
     // MARK: - Execution
@@ -95,6 +152,8 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
     /// - Parameters:
     ///   - stepDefinitions: Step definition types to instantiate and register.
     ///   - reportCollector: Optional collector for HTML report generation.
+    ///     When `nil` and `PICKLE_REPORT` env var is set, results are automatically
+    ///     collected into the shared `resultCollector` and written on process exit.
     /// - Returns: The scenario result.
     @discardableResult
     public func run(
@@ -119,7 +178,17 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
             feature: feature
         )
 
+        let effectiveCollector: ReportResultCollector?
         if let collector = reportCollector {
+            effectiveCollector = collector
+        } else if Self.reportEnabled {
+            Self.ensureAtexitRegistered()
+            effectiveCollector = Self._resultCollector
+        } else {
+            effectiveCollector = nil
+        }
+
+        if let collector = effectiveCollector {
             collector.record(
                 scenarioResult: result,
                 featureName: feature.name,
@@ -135,7 +204,8 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
 
     private static func buildScenarios(
         from features: [Feature],
-        tagFilter: TagFilter?
+        tagFilter: TagFilter?,
+        scenarioNameFilter: ScenarioNameFilter?
     ) -> [GherkinTestScenario] {
         let expander = OutlineExpander()
         let envFilter = TagFilter.fromEnvironment()
@@ -152,6 +222,19 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
             mergedFilter = nil
         }
 
+        let envNameFilter = ScenarioNameFilter.fromEnvironment()
+        let mergedNameFilter: ScenarioNameFilter?
+        switch (scenarioNameFilter, envNameFilter) {
+        case let (compileTime?, env?):
+            mergedNameFilter = compileTime.merging(env)
+        case let (compileTime?, nil):
+            mergedNameFilter = compileTime
+        case let (nil, env?):
+            mergedNameFilter = env
+        case (nil, nil):
+            mergedNameFilter = nil
+        }
+
         var results: [GherkinTestScenario] = []
 
         for feature in features {
@@ -163,6 +246,12 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
                 if let filter = mergedFilter {
                     let allTags = feature.tags + scenario.tags
                     if !filter.shouldInclude(tags: allTags) {
+                        continue
+                    }
+                }
+
+                if let nameFilter = mergedNameFilter {
+                    if !nameFilter.shouldInclude(name: scenario.name) {
                         continue
                     }
                 }

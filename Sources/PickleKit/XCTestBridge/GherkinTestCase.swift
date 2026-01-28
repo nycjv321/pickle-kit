@@ -37,6 +37,10 @@ open class GherkinTestCase: XCTestCase {
     /// Optional tag filter. Override to include/exclude scenarios by tags.
     open class var tagFilter: TagFilter? { nil }
 
+    /// Optional scenario name filter. Override to include only scenarios with matching names.
+    /// Combined with `CUCUMBER_SCENARIOS` env var (comma-separated, case-insensitive).
+    open class var scenarioNameFilter: ScenarioNameFilter? { nil }
+
     /// Feature file paths to load (filesystem paths).
     /// Supports file paths, directory paths, and `file:line` syntax.
     /// When non-nil, overrides `featureBundle`/`featureSubdirectory`.
@@ -204,6 +208,19 @@ open class GherkinTestCase: XCTestCase {
         case (nil, nil):
             filter = nil
         }
+        let envNameFilter = ScenarioNameFilter.fromEnvironment()
+        let nameFilter: ScenarioNameFilter?
+        switch (scenarioNameFilter, envNameFilter) {
+        case let (compileTime?, env?):
+            nameFilter = compileTime.merging(env)
+        case let (compileTime?, nil):
+            nameFilter = compileTime
+        case let (nil, env?):
+            nameFilter = env
+        case (nil, nil):
+            nameFilter = nil
+        }
+
         scenarioMaps[classId] = [:]
 
         for feature in features {
@@ -216,6 +233,13 @@ open class GherkinTestCase: XCTestCase {
                 if let filter = filter {
                     let allTags = feature.tags + scenario.tags
                     if !filter.shouldInclude(tags: allTags) {
+                        continue
+                    }
+                }
+
+                // Apply name filter
+                if let nameFilter = nameFilter {
+                    if !nameFilter.shouldInclude(name: scenario.name) {
                         continue
                     }
                 }
