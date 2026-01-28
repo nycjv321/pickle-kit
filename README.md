@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/nycjv321/pickle-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/nycjv321/pickle-kit/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Apple%20Platforms-blue)](https://github.com/nycjv321/pickle-kit)
-[![Swift](https://img.shields.io/badge/swift-5.9%2B-orange)](https://swift.org)
+[![Swift](https://img.shields.io/badge/swift-6.2%2B-orange)](https://swift.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Built with Claude](https://img.shields.io/badge/Built%20with-Claude-blueviolet)](https://claude.ai)
 
-A standalone Swift Cucumber/BDD testing framework with zero external dependencies. Parse Gherkin `.feature` files, register step definitions with regex patterns, and run scenarios — all integrated with XCTest.
+A standalone Swift Cucumber/BDD testing framework with zero external dependencies. Parse Gherkin `.feature` files, register step definitions with regex patterns, and run scenarios — integrated with both Swift Testing and XCTest.
 
 ## Installation
 
@@ -39,12 +39,11 @@ Feature: Calculator
     Then the result should be 8
 ```
 
-### 2. Create a test class
+### 2. Define step definitions
 
-Define step definitions as types conforming to the `StepDefinitions` protocol. Each stored `StepDefinition` property is automatically discovered via reflection:
+Create types conforming to the `StepDefinitions` protocol. Each stored `StepDefinition` property is automatically discovered via reflection:
 
 ```swift
-import XCTest
 import PickleKit
 
 struct CalculatorSteps: StepDefinitions {
@@ -60,9 +59,41 @@ struct CalculatorSteps: StepDefinitions {
     }
 
     let checkResult = StepDefinition.then("the result should be (\\d+)") { match in
-        XCTAssertEqual(Self.result, Int(match.captures[0])!)
+        let expected = Int(match.captures[0])!
+        assert(Self.result == expected, "Expected \(expected) but got \(Self.result)")
     }
 }
+```
+
+### 3. Write a test
+
+**Swift Testing (recommended)** — use `GherkinTestScenario` for library tests, unit tests, and CI pipelines:
+
+```swift
+import Testing
+import PickleKit
+
+@Suite(.serialized) struct CalculatorTests {
+    static let scenarios = GherkinTestScenario.scenarios(
+        bundle: .module, subdirectory: "Features"
+    )
+
+    @Test(arguments: CalculatorTests.scenarios)
+    func scenario(_ test: GherkinTestScenario) async throws {
+        let result = try await test.run(stepDefinitions: [CalculatorSteps.self])
+        #expect(result.passed)
+    }
+}
+```
+
+<details>
+<summary>XCTest alternative (GherkinTestCase)</summary>
+
+Use `GherkinTestCase` when you need XCUITest for UI tests, or are working in a target where Swift Testing is unavailable (e.g., Xcode UI testing bundles):
+
+```swift
+import XCTest
+import PickleKit
 
 final class CalculatorTests: GherkinTestCase {
     override class var featureSubdirectory: String? { "Features" }
@@ -72,10 +103,12 @@ final class CalculatorTests: GherkinTestCase {
 }
 ```
 
+</details>
+
 <details>
 <summary>Inline alternative (registerStepDefinitions)</summary>
 
-You can also register steps inline — both approaches work and can coexist:
+With `GherkinTestCase`, you can also register steps inline — both approaches work and can coexist:
 
 ```swift
 final class CalculatorTests: GherkinTestCase {
@@ -102,7 +135,7 @@ final class CalculatorTests: GherkinTestCase {
 
 </details>
 
-### 3. Run tests
+### 4. Run tests
 
 ```bash
 swift test
@@ -112,7 +145,7 @@ Each scenario appears as a separate test in Xcode's test navigator.
 
 ## Why PickleKit
 
-Before PickleKit, using Cucumber-style BDD in Swift required external toolchains — Ruby (via Cucumber), Java (via Karate), or CocoaPods-based frameworks. PickleKit provides a zero-dependency Swift-native Cucumber framework that integrates directly with XCTest. No Gemfile, no Podfile, no build plugins — just a Swift package dependency.
+Before PickleKit, using Cucumber-style BDD in Swift required external toolchains — Ruby (via Cucumber), Java (via Karate), or CocoaPods-based frameworks. PickleKit provides a zero-dependency Swift-native Cucumber framework that integrates directly with Swift Testing and XCTest. No Gemfile, no Podfile, no build plugins — just a Swift package dependency.
 
 ## Gherkin Support
 
@@ -148,6 +181,7 @@ Sources/PickleKit/
 ├── Parser/                 # GherkinParser (state machine), OutlineExpander
 ├── Report/                 # HTML report generation (StepResult, HTMLReportGenerator, ReportResultCollector)
 ├── Runner/                 # StepRegistry, StepDefinitions, ScenarioRunner, TagFilter
+├── SwiftTestingBridge/     # GherkinTestScenario (Swift Testing integration)
 └── XCTestBridge/           # GherkinTestCase (XCTest integration)
 ```
 
@@ -155,9 +189,10 @@ All types are `Sendable`. Step handlers are `@MainActor async throws`.
 
 ## Requirements
 
-- Swift 5.9+
+- Swift 6.2+
 - macOS 14+ / iOS 17+ / tvOS 17+ / watchOS 10+
-- XCTest bridge requires ObjC runtime (Apple platforms)
+- Swift Testing bridge (`GherkinTestScenario`) works on all platforms with Swift Testing support
+- XCTest bridge (`GherkinTestCase`) requires ObjC runtime (Apple platforms)
 
 ## Testing
 
