@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PickleKit is a standalone Swift Cucumber/BDD testing framework. It provides a Gherkin parser, step registry, scenario runner, and bridges for both Swift Testing and XCTest with zero external dependencies. Requires Swift 6.1+ (swift-tools-version 6.1).
+PickleKit is a standalone Swift Cucumber/BDD testing framework. It provides a Gherkin parser, step registry, scenario runner, and bridges for both Swift Testing and XCTest with zero external dependencies. Requires Swift 6.2+ (swift-tools-version 6.2).
 
 ## Architecture
 
