@@ -171,7 +171,7 @@ PICKLE_REPORT=1 swift test
 
 The report includes summary counts, per-feature sections with collapsible scenarios, per-step timing and error details, and interactive filtering controls.
 
-![HTML test report showing a completed test run](docs/todo-test-run.png)
+![HTML test report showing a completed test run](docs/xcui-test-report.png)
 
 ![HTML test report with filtered scenarios](docs/example-filtered-scenarios.png)
 
