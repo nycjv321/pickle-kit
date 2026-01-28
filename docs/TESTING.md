@@ -59,24 +59,42 @@ PickleKit covers the **E2E / acceptance** layer of the trophy — human-readable
 
 Valuable for pure logic and isolated components, but not the primary confidence driver. Use them where the input/output boundary is clear and no integration wiring is needed.
 
-- **Framework tests**: `ParserTests`, `StepRegistryTests`, `ScenarioRunnerTests`, `TagFilterTests`, `StepResultTests`, `StepDefinitionsTests`, `HTMLReportGeneratorTests`
-- **Bridge tests**: `GherkinTestScenarioTests` (Swift Testing bridge: loading, tag filtering, execution, properties), `GherkinTestCaseTests` (XCTest bridge: dynamic suite generation, tag filtering, subclass isolation, registry)
-- **App tests**: `TodoStoreTests` — verifies add, remove, update, clear, toggle completion without any UI
-
 ### Integration Tests
 
-The sweet spot for confidence. These exercise real components working together and catch the class of bugs that unit tests miss: wiring errors, contract mismatches, and incorrect assumptions between layers.
-
-- `GherkinIntegrationTests` — a Swift Testing suite that runs all fixture `.feature` files through the full parse → expand → register → run pipeline via `GherkinTestScenario`. Uses `@Test(arguments:)` with 6 domain-specific `StepDefinitions` types (one per fixture feature file), executing all 13 expanded scenarios and asserting `result.passed`
-- `GherkinTestCaseTests` helper subclasses — 8 `GherkinTestCase` subclasses (`*BridgeTestCase`) that are auto-discovered by XCTest at runtime, providing implicit integration testing for the XCTest bridge pipeline. `AllFixturesBridgeTestCase` exercises the same full pipeline (parse → expand → dynamic method generation → step registration → execution) for all 13 scenarios
-- Most testing effort should go here. When in doubt about where to add a test, prefer an integration test over a unit test
+The sweet spot for confidence. These exercise real components working together and catch the class of bugs that unit tests miss: wiring errors, contract mismatches, and incorrect assumptions between layers. Most testing effort should go here. When in doubt about where to add a test, prefer an integration test over a unit test.
 
 ### UI / Acceptance Tests (E2E)
 
-PickleKit + XCUITest covers this layer. These tests verify critical user flows in human-readable Gherkin and are the only tests that exercise the real UI rendering and interaction layer. Use them selectively for flows that can only be validated through the real UI.
+PickleKit + XCUITest covers this layer. These tests verify critical user flows in human-readable Gherkin and are the only tests that exercise the real UI rendering and interaction layer. Use them selectively for flows that can only be validated through the real UI. Keep E2E tests focused on critical paths — edge cases and error conditions are better covered at the integration or unit layer.
 
-- `TodoUITests` — drives the TodoApp through XCUIApplication, verifying add, delete, edit, toggle, batch operations, and empty state
-- Keep E2E tests focused on critical paths. Edge cases and error conditions are better covered at the integration or unit layer
+## Choosing a Test Bridge
+
+PickleKit provides two bridges for running Gherkin scenarios. Both use the same `StepDefinitions` types, so step logic is portable between them.
+
+| Bridge | Runner | Use when |
+|--------|--------|----------|
+| `GherkinTestScenario` (Swift Testing) | `swift test` | Library/unit tests, CI pipelines, no UI dependency |
+| `GherkinTestCase` (XCTest) | `xcodebuild` | UI tests with XCUITest, Xcode-managed schemes |
+
+Choose `GherkinTestScenario` by default. Switch to `GherkinTestCase` when you need XCUITest or are working in a target where Swift Testing is unavailable (e.g., Xcode UI testing bundles).
+
+## Test Suites
+
+| Suite | Layer | Bridge | What it covers |
+|-------|-------|--------|----------------|
+| `ParserTests` | Unit | — | Gherkin parsing |
+| `StepRegistryTests` | Unit | — | Pattern matching, regex |
+| `ScenarioRunnerTests` | Unit | — | Scenario execution |
+| `TagFilterTests` | Unit | — | Tag include/exclude logic |
+| `StepResultTests` | Unit | — | Step status, timing |
+| `StepDefinitionsTests` | Unit | — | StepDefinition struct, protocol, Mirror discovery |
+| `HTMLReportGeneratorTests` | Unit | — | Report generation |
+| `GherkinTestScenarioTests` | Unit | Swift Testing | Bridge loading, filtering, execution |
+| `GherkinTestCaseTests` | Unit | XCTest | Bridge suite generation, configuration, registry |
+| `GherkinIntegrationTests` | Integration | Swift Testing | Full pipeline via `@Test(arguments:)` |
+| `*BridgeTestCase` subclasses | Integration | XCTest | Full pipeline via auto-discovered XCTest suites |
+| `TodoStoreTests` | Unit | — | App domain logic |
+| `TodoUITests` | E2E | XCTest | App UI flows via XCUITest |
 
 ## UI Test Design Rules
 
