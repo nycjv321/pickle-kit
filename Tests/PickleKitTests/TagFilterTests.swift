@@ -1,153 +1,168 @@
-import XCTest
+import Testing
+import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 @testable import PickleKit
 
-final class TagFilterTests: XCTestCase {
+@Suite(.serialized)
+struct TagFilterTests {
 
     // MARK: - Empty Filters
 
-    func testEmptyFilterIncludesAll() {
+    @Test func emptyFilterIncludesAll() {
         let filter = TagFilter()
 
-        XCTAssertTrue(filter.shouldInclude(tags: []))
-        XCTAssertTrue(filter.shouldInclude(tags: ["anything"]))
-        XCTAssertTrue(filter.shouldInclude(tags: ["smoke", "fast"]))
+        #expect(filter.shouldInclude(tags: []))
+        #expect(filter.shouldInclude(tags: ["anything"]))
+        #expect(filter.shouldInclude(tags: ["smoke", "fast"]))
     }
 
     // MARK: - Include Tags
 
-    func testIncludeTagsMatchAny() {
+    @Test func includeTagsMatchAny() {
         let filter = TagFilter(includeTags: ["smoke", "critical"])
 
-        XCTAssertTrue(filter.shouldInclude(tags: ["smoke"]))
-        XCTAssertTrue(filter.shouldInclude(tags: ["critical"]))
-        XCTAssertTrue(filter.shouldInclude(tags: ["smoke", "fast"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["slow"]))
-        XCTAssertFalse(filter.shouldInclude(tags: []))
+        #expect(filter.shouldInclude(tags: ["smoke"]))
+        #expect(filter.shouldInclude(tags: ["critical"]))
+        #expect(filter.shouldInclude(tags: ["smoke", "fast"]))
+        #expect(!filter.shouldInclude(tags: ["slow"]))
+        #expect(!filter.shouldInclude(tags: []))
     }
 
     // MARK: - Exclude Tags
 
-    func testExcludeTagsReject() {
+    @Test func excludeTagsReject() {
         let filter = TagFilter(excludeTags: ["wip", "skip"])
 
-        XCTAssertTrue(filter.shouldInclude(tags: []))
-        XCTAssertTrue(filter.shouldInclude(tags: ["smoke"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["wip"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["skip"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["smoke", "wip"]))
+        #expect(filter.shouldInclude(tags: []))
+        #expect(filter.shouldInclude(tags: ["smoke"]))
+        #expect(!filter.shouldInclude(tags: ["wip"]))
+        #expect(!filter.shouldInclude(tags: ["skip"]))
+        #expect(!filter.shouldInclude(tags: ["smoke", "wip"]))
     }
 
     // MARK: - Combined Include + Exclude
 
-    func testExcludeTakesPriority() {
+    @Test func excludeTakesPriority() {
         let filter = TagFilter(includeTags: ["smoke"], excludeTags: ["wip"])
 
-        XCTAssertTrue(filter.shouldInclude(tags: ["smoke"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["smoke", "wip"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["wip"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["fast"])) // Not in include set
+        #expect(filter.shouldInclude(tags: ["smoke"]))
+        #expect(!filter.shouldInclude(tags: ["smoke", "wip"]))
+        #expect(!filter.shouldInclude(tags: ["wip"]))
+        #expect(!filter.shouldInclude(tags: ["fast"])) // Not in include set
     }
 
     // MARK: - Edge Cases
 
-    func testSingleIncludeTag() {
+    @Test func singleIncludeTag() {
         let filter = TagFilter(includeTags: ["regression"])
 
-        XCTAssertTrue(filter.shouldInclude(tags: ["regression"]))
-        XCTAssertTrue(filter.shouldInclude(tags: ["regression", "slow"]))
-        XCTAssertFalse(filter.shouldInclude(tags: ["smoke"]))
+        #expect(filter.shouldInclude(tags: ["regression"]))
+        #expect(filter.shouldInclude(tags: ["regression", "slow"]))
+        #expect(!filter.shouldInclude(tags: ["smoke"]))
     }
 
-    func testSingleExcludeTag() {
+    @Test func singleExcludeTag() {
         let filter = TagFilter(excludeTags: ["manual"])
 
-        XCTAssertTrue(filter.shouldInclude(tags: ["smoke"]))
-        XCTAssertTrue(filter.shouldInclude(tags: []))
-        XCTAssertFalse(filter.shouldInclude(tags: ["manual"]))
+        #expect(filter.shouldInclude(tags: ["smoke"]))
+        #expect(filter.shouldInclude(tags: []))
+        #expect(!filter.shouldInclude(tags: ["manual"]))
     }
 
     // MARK: - Equatable
 
-    func testEquatable() {
+    @Test func equatable() {
         let a = TagFilter(includeTags: ["smoke"], excludeTags: ["wip"])
         let b = TagFilter(includeTags: ["smoke"], excludeTags: ["wip"])
         let c = TagFilter(includeTags: ["fast"], excludeTags: ["wip"])
 
-        XCTAssertEqual(a, b)
-        XCTAssertNotEqual(a, c)
+        #expect(a == b)
+        #expect(a != c)
     }
 
     // MARK: - fromEnvironment
 
-    override func setUp() {
-        super.setUp()
+    @Test func fromEnvironmentWithIncludeTags() {
         unsetenv("CUCUMBER_TAGS")
         unsetenv("CUCUMBER_EXCLUDE_TAGS")
-    }
+        defer { unsetenv("CUCUMBER_TAGS"); unsetenv("CUCUMBER_EXCLUDE_TAGS") }
 
-    override func tearDown() {
-        unsetenv("CUCUMBER_TAGS")
-        unsetenv("CUCUMBER_EXCLUDE_TAGS")
-        super.tearDown()
-    }
-
-    func testFromEnvironmentWithIncludeTags() {
         setenv("CUCUMBER_TAGS", "smoke,critical", 1)
 
         let filter = TagFilter.fromEnvironment()
-        XCTAssertNotNil(filter)
-        XCTAssertEqual(filter?.includeTags, ["smoke", "critical"])
-        XCTAssertEqual(filter?.excludeTags, [])
+        #expect(filter != nil)
+        #expect(filter?.includeTags == ["smoke", "critical"])
+        #expect(filter?.excludeTags == [])
     }
 
-    func testFromEnvironmentWithExcludeTags() {
+    @Test func fromEnvironmentWithExcludeTags() {
+        unsetenv("CUCUMBER_TAGS")
+        unsetenv("CUCUMBER_EXCLUDE_TAGS")
+        defer { unsetenv("CUCUMBER_TAGS"); unsetenv("CUCUMBER_EXCLUDE_TAGS") }
+
         setenv("CUCUMBER_EXCLUDE_TAGS", "wip,manual", 1)
 
         let filter = TagFilter.fromEnvironment()
-        XCTAssertNotNil(filter)
-        XCTAssertEqual(filter?.includeTags, [])
-        XCTAssertEqual(filter?.excludeTags, ["wip", "manual"])
+        #expect(filter != nil)
+        #expect(filter?.includeTags == [])
+        #expect(filter?.excludeTags == ["wip", "manual"])
     }
 
-    func testFromEnvironmentWithBoth() {
+    @Test func fromEnvironmentWithBoth() {
+        unsetenv("CUCUMBER_TAGS")
+        unsetenv("CUCUMBER_EXCLUDE_TAGS")
+        defer { unsetenv("CUCUMBER_TAGS"); unsetenv("CUCUMBER_EXCLUDE_TAGS") }
+
         setenv("CUCUMBER_TAGS", "smoke,fast", 1)
         setenv("CUCUMBER_EXCLUDE_TAGS", "wip,slow", 1)
 
         let filter = TagFilter.fromEnvironment()
-        XCTAssertNotNil(filter)
-        XCTAssertEqual(filter?.includeTags, ["smoke", "fast"])
-        XCTAssertEqual(filter?.excludeTags, ["wip", "slow"])
+        #expect(filter != nil)
+        #expect(filter?.includeTags == ["smoke", "fast"])
+        #expect(filter?.excludeTags == ["wip", "slow"])
     }
 
-    func testFromEnvironmentReturnsNilWhenUnset() {
+    @Test func fromEnvironmentReturnsNilWhenUnset() {
+        unsetenv("CUCUMBER_TAGS")
+        unsetenv("CUCUMBER_EXCLUDE_TAGS")
+        defer { unsetenv("CUCUMBER_TAGS"); unsetenv("CUCUMBER_EXCLUDE_TAGS") }
+
         let filter = TagFilter.fromEnvironment()
-        XCTAssertNil(filter)
+        #expect(filter == nil)
     }
 
-    func testFromEnvironmentTrimsWhitespace() {
+    @Test func fromEnvironmentTrimsWhitespace() {
+        unsetenv("CUCUMBER_TAGS")
+        unsetenv("CUCUMBER_EXCLUDE_TAGS")
+        defer { unsetenv("CUCUMBER_TAGS"); unsetenv("CUCUMBER_EXCLUDE_TAGS") }
+
         setenv("CUCUMBER_TAGS", " smoke , fast ", 1)
 
         let filter = TagFilter.fromEnvironment()
-        XCTAssertNotNil(filter)
-        XCTAssertEqual(filter?.includeTags, ["smoke", "fast"])
+        #expect(filter != nil)
+        #expect(filter?.includeTags == ["smoke", "fast"])
     }
 
     // MARK: - merging
 
-    func testMergingCombinesSets() {
+    @Test func mergingCombinesSets() {
         let a = TagFilter(includeTags: ["smoke"], excludeTags: ["wip"])
         let b = TagFilter(includeTags: ["fast"], excludeTags: ["manual"])
 
         let merged = a.merging(b)
-        XCTAssertEqual(merged.includeTags, ["smoke", "fast"])
-        XCTAssertEqual(merged.excludeTags, ["wip", "manual"])
+        #expect(merged.includeTags == ["smoke", "fast"])
+        #expect(merged.excludeTags == ["wip", "manual"])
     }
 
-    func testMergingWithEmptyFilter() {
+    @Test func mergingWithEmptyFilter() {
         let original = TagFilter(includeTags: ["smoke"], excludeTags: ["wip"])
         let empty = TagFilter()
 
         let merged = original.merging(empty)
-        XCTAssertEqual(merged, original)
+        #expect(merged == original)
     }
 }

@@ -54,14 +54,14 @@ struct TodoWindow {
 
     /// Click the text field and paste text into it.
     static func enterText(_ text: String) {
-        XCTAssertTrue(todoTextField.waitForExistence(timeout: 5))
+        XCTAssertTrue(todoTextField.waitForExistence(timeout: 5), "Text field did not appear")
         todoTextField.click()
         pasteText(text, into: todoTextField)
     }
 
     /// Click the add button.
     static func tapAdd() {
-        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5), "Add button did not appear")
         addButton.click()
     }
 
@@ -74,25 +74,25 @@ struct TodoWindow {
     /// Delete the todo at the given index.
     static func deleteTodo(at index: Int) {
         let button = deleteButton(at: index)
-        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "Delete button at index \(index) did not appear")
         button.click()
     }
 
     /// Toggle the completion state of the todo at the given index.
     static func toggleTodo(at index: Int) {
         let toggle = todoToggle(at: index)
-        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5), "Toggle at index \(index) did not appear")
         toggle.click()
     }
 
     /// Click edit, paste new text, and confirm with Return.
     static func editTodo(at index: Int, to newText: String) {
         let edit = editButton(at: index)
-        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        XCTAssertTrue(edit.waitForExistence(timeout: 5), "Edit button at index \(index) did not appear")
         edit.click()
 
         let field = editTextField(at: index)
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Edit text field at index \(index) did not appear")
         field.click()
         pasteText(newText, into: field)
         field.typeKey(.return, modifierFlags: [])

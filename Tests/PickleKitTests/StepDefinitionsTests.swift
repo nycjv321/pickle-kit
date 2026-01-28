@@ -1,66 +1,72 @@
-import XCTest
+import Foundation
+import Testing
 @testable import PickleKit
+
+/// Thread-safe mutable box for test state captured across isolation boundaries.
+private final class TestBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
+}
 
 // MARK: - StepDefinition Struct Tests
 
-final class StepDefinitionTests: XCTestCase {
+@Suite struct StepDefinitionTests {
 
-    func testGivenFactory() {
+    @Test func givenFactory() {
         let def = StepDefinition.given("a pattern") { _ in }
-        XCTAssertEqual(def.keyword, .given)
-        XCTAssertEqual(def.pattern, "a pattern")
+        #expect(def.keyword == .given)
+        #expect(def.pattern == "a pattern")
     }
 
-    func testWhenFactory() {
+    @Test func whenFactory() {
         let def = StepDefinition.when("a pattern") { _ in }
-        XCTAssertEqual(def.keyword, .when)
-        XCTAssertEqual(def.pattern, "a pattern")
+        #expect(def.keyword == .when)
+        #expect(def.pattern == "a pattern")
     }
 
-    func testThenFactory() {
+    @Test func thenFactory() {
         let def = StepDefinition.then("a pattern") { _ in }
-        XCTAssertEqual(def.keyword, .then)
-        XCTAssertEqual(def.pattern, "a pattern")
+        #expect(def.keyword == .then)
+        #expect(def.pattern == "a pattern")
     }
 
-    func testStepFactory() {
+    @Test func stepFactory() {
         let def = StepDefinition.step("a pattern") { _ in }
-        XCTAssertNil(def.keyword)
-        XCTAssertEqual(def.pattern, "a pattern")
+        #expect(def.keyword == nil)
+        #expect(def.pattern == "a pattern")
     }
 
-    func testRegisterInRegistry() {
+    @Test func registerInRegistry() {
         let registry = StepRegistry()
         let def = StepDefinition.given("hello world") { _ in }
         def.register(in: registry)
-        XCTAssertEqual(registry.count, 1)
+        #expect(registry.count == 1)
     }
 
-    func testHandlerExecutesThroughRegistration() async throws {
-        nonisolated(unsafe) var executed = false
+    @Test func handlerExecutesThroughRegistration() async throws {
+        let box = TestBox(false)
         let registry = StepRegistry()
         let def = StepDefinition.given("I do something") { _ in
-            executed = true
+            box.value = true
         }
         def.register(in: registry)
 
         let step = Step(keyword: .given, text: "I do something")
         let result = try registry.match(step)
-        XCTAssertNotNil(result)
+        #expect(result != nil)
         try await result!.handler(result!.match)
-        XCTAssertTrue(executed)
+        #expect(box.value)
     }
 
-    func testRegisterRoutesKeywordCorrectly() {
+    @Test func registerRoutesKeywordCorrectly() {
         let registry = StepRegistry()
 
-        // All keyword variants should register successfully
         StepDefinition.given("given pattern") { _ in }.register(in: registry)
         StepDefinition.when("when pattern") { _ in }.register(in: registry)
         StepDefinition.then("then pattern") { _ in }.register(in: registry)
         StepDefinition.step("step pattern") { _ in }.register(in: registry)
 
-        XCTAssertEqual(registry.count, 4)
+        #expect(registry.count == 4)
     }
 }
 
@@ -106,111 +112,101 @@ private struct CountingStepType: StepDefinitions {
 
 // MARK: - Mirror-Based Discovery Tests
 
-final class StepDefinitionsProtocolTests: XCTestCase {
+@Suite struct StepDefinitionsProtocolTests {
 
-    func testMirrorDiscoveryFindsAllProperties() {
+    @Test func mirrorDiscoveryFindsAllProperties() {
         let registry = StepRegistry()
         let provider = ThreeStepType()
         provider.register(in: registry)
-        XCTAssertEqual(registry.count, 3)
+        #expect(registry.count == 3)
     }
 
-    func testMirrorDiscoveryIgnoresNonStepProperties() {
+    @Test func mirrorDiscoveryIgnoresNonStepProperties() {
         let registry = StepRegistry()
         let provider = MixedPropertyType()
         provider.register(in: registry)
-        XCTAssertEqual(registry.count, 2)
+        #expect(registry.count == 2)
     }
 
-    func testMirrorDiscoveryWithArrayProperty() {
+    @Test func mirrorDiscoveryWithArrayProperty() {
         let registry = StepRegistry()
         let provider = ArrayPropertyType()
         provider.register(in: registry)
-        // 2 from array + 1 single = 3
-        XCTAssertEqual(registry.count, 3)
+        #expect(registry.count == 3)
     }
 
-    func testCustomRegisterOverride() {
+    @Test func customRegisterOverride() {
         let registry = StepRegistry()
         let provider = CustomRegisterType()
         provider.register(in: registry)
-        // Only the custom-registered step, not the stored property
-        XCTAssertEqual(registry.count, 1)
+        #expect(registry.count == 1)
 
         let step = Step(keyword: .given, text: "custom registered")
         let match = try? registry.match(step)
-        XCTAssertNotNil(match)
+        #expect(match != nil)
 
         let ignoredStep = Step(keyword: .given, text: "should be ignored")
         let ignoredMatch = try? registry.match(ignoredStep)
-        XCTAssertNil(ignoredMatch)
+        #expect(ignoredMatch == nil)
     }
 
-    func testEmptyStepDefinitionsType() {
+    @Test func emptyStepDefinitionsType() {
         let registry = StepRegistry()
         let provider = EmptyStepType()
         provider.register(in: registry)
-        XCTAssertEqual(registry.count, 0)
+        #expect(registry.count == 0)
     }
 
     // MARK: - Integration Tests
 
-    func testMultipleTypesRegistered() {
+    @Test func multipleTypesRegistered() {
         let registry = StepRegistry()
         ThreeStepType().register(in: registry)
         MixedPropertyType().register(in: registry)
-        // 3 + 2 = 5
-        XCTAssertEqual(registry.count, 5)
+        #expect(registry.count == 5)
     }
 
-    func testInitCalledPerRegistration() {
+    @Test func initCalledPerRegistration() {
         CountingStepType.initCount = 0
         let registry = StepRegistry()
 
         let p1 = CountingStepType()
         p1.register(in: registry)
-        XCTAssertEqual(CountingStepType.initCount, 1)
+        #expect(CountingStepType.initCount == 1)
 
         let p2 = CountingStepType()
         p2.register(in: registry)
-        XCTAssertEqual(CountingStepType.initCount, 2)
+        #expect(CountingStepType.initCount == 2)
     }
 
-    func testMixedRegistration() {
+    @Test func mixedRegistration() {
         let registry = StepRegistry()
         ThreeStepType().register(in: registry)
         registry.given("inline step") { _ in }
-        // 3 from type + 1 inline = 4
-        XCTAssertEqual(registry.count, 4)
+        #expect(registry.count == 4)
     }
 }
 
 // MARK: - StepDefinitionFilter Tests
 
-final class StepDefinitionFilterTests: XCTestCase {
+@Suite struct StepDefinitionFilterTests {
 
-    func testFilterFromEnvironmentWhenUnset() {
-        // CUCUMBER_STEP_DEFINITIONS is not expected to be set during normal test runs
+    @Test func filterFromEnvironmentWhenUnset() {
         let result = StepDefinitionFilter.fromEnvironment()
-        // If it happens to be set in the test environment, we just verify the return type
         if ProcessInfo.processInfo.environment["CUCUMBER_STEP_DEFINITIONS"] == nil {
-            XCTAssertNil(result)
+            #expect(result == nil)
         }
     }
 
-    func testFilterParsesCommaSeparatedNames() {
-        // Test the parsing logic directly by verifying the expected behavior:
-        // "ArithmeticSteps,CartSteps" should produce {"ArithmeticSteps", "CartSteps"}
-        // We can't easily set env vars in-process, so we test the Set construction logic
+    @Test func filterParsesCommaSeparatedNames() {
         let input = "ArithmeticSteps, CartSteps , FruitSteps"
         let parsed = Set(input.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
-        XCTAssertEqual(parsed, Set(["ArithmeticSteps", "CartSteps", "FruitSteps"]))
+        #expect(parsed == Set(["ArithmeticSteps", "CartSteps", "FruitSteps"]))
     }
 
-    func testFilterEmptyStringProducesNil() {
-        // Verify the trimming/empty check logic
+    @Test func filterEmptyStringProducesNil() {
         let empty = "   "
         let isEmpty = empty.trimmingCharacters(in: .whitespaces).isEmpty
-        XCTAssertTrue(isEmpty)
+        #expect(isEmpty)
     }
 }

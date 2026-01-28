@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PickleKit is a standalone Swift Cucumber/BDD testing framework. It provides a Gherkin parser, step registry, scenario runner, and XCTest bridge with zero external dependencies.
+PickleKit is a standalone Swift Cucumber/BDD testing framework. It provides a Gherkin parser, step registry, scenario runner, and bridges for both Swift Testing and XCTest with zero external dependencies. Requires Swift 6.1+ (swift-tools-version 6.1).
 
 ## Architecture
 
@@ -25,13 +25,15 @@ Sources/PickleKit/
 │   ├── StepDefinitions.swift     # StepDefinition struct, StepDefinitions protocol, StepDefinitionFilter
 │   ├── ScenarioRunner.swift      # Executes scenarios against registry
 │   └── TagFilter.swift           # Include/exclude tag filtering
+├── SwiftTestingBridge/
+│   └── GherkinTestScenario.swift # Swift Testing bridge via @Test(arguments:)
 └── XCTestBridge/
     └── GherkinTestCase.swift     # XCTestCase subclass with dynamic test generation
 ```
 
 ### Key Design Decisions
 
-- **Zero dependencies** — only Foundation and XCTest (implicit for test targets)
+- **Zero dependencies** — only Foundation, Testing (Swift Testing), and XCTest (implicit for test targets)
 - **All AST types are `Sendable` and `Equatable`** — value types throughout
 - **`StepRegistry` is instance-based** (not singleton) for testability
 - **`StepHandler` is `@MainActor @Sendable (StepMatch) async throws -> Void`** — async/await compatible, isolated to `@MainActor` so handlers safely use XCTest assertions and UI frameworks
@@ -41,6 +43,7 @@ Sources/PickleKit/
 - **`GherkinParser` is a line-by-line state machine** with states: idle → inFeature → inBackground/inScenario/inOutline/inExamples/inDocString
 - **Conditional compilation** — `GherkinTestCase` is wrapped in `#if canImport(XCTest) && canImport(ObjectiveC)`
 - **Reflection-based step registration** — `StepDefinitions` protocol uses `Mirror` to auto-discover stored `StepDefinition` properties. `GherkinTestCase.stepDefinitionTypes` enables declaring step providers per subclass. Type-based providers are registered before `registerStepDefinitions()`, so both approaches coexist.
+- **Two test bridges** — `GherkinTestScenario` for Swift Testing (`@Test(arguments:)`), `GherkinTestCase` for XCTest (UI tests, legacy). Both use the same `StepDefinitions` types. `ScenarioDefinition` has `asScenario`/`asOutline` convenience accessors for cleaner pattern matching in tests.
 
 ### Platforms
 
@@ -57,12 +60,13 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 | `StepDefinitions.swift` | StepDefinition (declarative step), StepDefinitions protocol (Mirror-based discovery), StepDefinitionFilter (env var filtering) |
 | `ScenarioRunner.swift` | ScenarioRunnerError, ScenarioResult, FeatureResult, ScenarioRunner |
 | `TagFilter.swift` | Include/exclude filtering on tag arrays |
+| `GherkinTestScenario.swift` | Swift Testing bridge: `@Test(arguments:)` parameterized scenarios |
 | `GherkinTestCase.swift` | XCTestCase subclass, dynamic test suite via ObjC runtime, report integration |
 | `StepResult.swift` | StepStatus enum, StepResult per-step execution data |
 | `TestRunResult.swift` | Aggregated test run result with feature/scenario/step counts |
 | `HTMLReportGenerator.swift` | Self-contained HTML report generator with inline CSS/JS |
 | `ReportResultCollector.swift` | Thread-safe result accumulator using OSAllocatedUnfairLock |
-| `GherkinIntegrationTests.swift` | GherkinTestCase subclass running all fixture features (enables `PICKLE_REPORT=1 swift test`) |
+| `GherkinIntegrationTests.swift` | Swift Testing suite using `GherkinTestScenario` to run all fixture features |
 
 ## Testing
 
@@ -97,7 +101,7 @@ Tests/PickleKitTests/
 ├── StepResultTests.swift          # Step-level results: status, timing, tags, undefined/skipped, backward compat
 ├── StepDefinitionsTests.swift     # StepDefinition struct, StepDefinitions protocol, Mirror discovery, filter
 ├── HTMLReportGeneratorTests.swift # HTML generation: structure, counts, CSS classes, escaping, collector, aggregations
-├── GherkinIntegrationTests.swift  # Full pipeline: domain step types + stepDefinitionTypes
+├── GherkinIntegrationTests.swift  # Full pipeline: domain step types + GherkinTestScenario
 └── Fixtures/                      # .feature files loaded via Bundle.module
     ├── basic.feature
     ├── with_background.feature
@@ -111,6 +115,8 @@ Fixtures are copied into the test bundle via `resources: [.copy("Fixtures")]` in
 
 ### Test Patterns
 
+All library tests use Swift Testing (`import Testing`). Tests use `@Suite struct`, `@Test func`, `#expect()`, and `try #require()`.
+
 ```swift
 // Parser tests load fixtures
 private func loadFixture(_ name: String) throws -> Feature {
@@ -120,13 +126,25 @@ private func loadFixture(_ name: String) throws -> Feature {
 }
 
 // Runner tests use mock step handlers
-registry.given("a setup") { _ in log.append("given") }
+registry.given("a setup") { _ in log.value.append("given") }
 let result = try await runner.run(scenario: scenario)
-XCTAssertTrue(result.passed)
+#expect(result.passed)
 
 // Registry tests check matching
 let result = try registry.match(step)
-XCTAssertEqual(result?.match.captures, ["42", "apples"])
+#expect(result?.match.captures == ["42", "apples"])
+
+// Unwrapping ScenarioDefinition with convenience accessors
+let scenario = try #require(feature.scenarios[0].asScenario)
+let outline = try #require(feature.scenarios[0].asOutline)
+
+// Mutable state in @Sendable closures uses TestBox (class-based, @unchecked Sendable)
+let box = TestBox(false)
+registry.given("I do something") { _ in box.value = true }
+// ... run scenario ...
+#expect(box.value)
+
+// Tests that modify environment variables use @Suite(.serialized) + defer cleanup
 ```
 
 ## Common Tasks
@@ -157,7 +175,7 @@ XCTAssertEqual(result?.match.captures, ["42", "apples"])
 1. Create a struct conforming to `StepDefinitions` in a test file
 2. Declare steps as stored `let` properties using `StepDefinition.given/when/then/step`
 3. Own static state in `nonisolated(unsafe) static var` properties, reset in `init()`
-4. Add the type to `stepDefinitionTypes` in the `GherkinTestCase` subclass
+4. Add the type to `stepDefinitions` in `GherkinTestScenario.run()` (Swift Testing) or `stepDefinitionTypes` in a `GherkinTestCase` subclass (XCTest)
 5. Test with `StepDefinitionsTests` patterns
 
 ### Modifying step matching behavior
@@ -211,8 +229,24 @@ struct ArithmeticSteps: StepDefinitions {
     }
 }
 
-// Use stepDefinitionTypes in a GherkinTestCase subclass
-final class MyTests: GherkinTestCase {
+// Swift Testing bridge (preferred for library/unit tests)
+import Testing
+import PickleKit
+
+@Suite(.serialized) struct MyTests {
+    static let allScenarios = GherkinTestScenario.scenarios(
+        bundle: .module, subdirectory: "Features"
+    )
+
+    @Test(arguments: MyTests.allScenarios)
+    func scenario(_ test: GherkinTestScenario) async throws {
+        let result = try await test.run(stepDefinitions: [ArithmeticSteps.self])
+        #expect(result.passed)
+    }
+}
+
+// XCTest bridge (for UI tests with XCUITest)
+final class MyUITests: GherkinTestCase {
     override class var stepDefinitionTypes: [any StepDefinitions.Type] {
         [ArithmeticSteps.self]
     }
@@ -292,7 +326,7 @@ let testRun = collector.buildTestRunResult()
 
 ### Test Reporting
 
-CI generates `junit.xml` via `xcbeautify --report junit --report-path .` (not `--xunit-output`, which doesn't produce files on macOS). The report is published by `dorny/test-reporter@v1` with `fail-on-error: false`.
+CI generates `junit.xml` via `swift test --xunit-output junit.xml`. The report is published by `dorny/test-reporter@v1` with `fail-on-error: false`.
 
 ### Release Process
 
@@ -376,6 +410,12 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 
 **Report writing mechanism:** Reports are written from both `class func tearDown()` (after each `GherkinTestCase` subclass finishes) and an `atexit` handler. The `class func tearDown()` ensures reports are generated even when `xcodebuild` terminates the test runner before `atexit` fires.
 
+### Test Framework Split
+
+- **`TodoStoreTests`** uses Swift Testing (`import Testing`, `@Suite struct`, `@Test func`, `#expect`). Unit tests have no UI dependency and work with Swift Testing.
+- **`TodoAppUITests`** uses XCTest (`import XCTest`, `GherkinTestCase`). Xcode blocks `import Testing` in `bundle.ui-testing` targets via `TESTING_FRAMEWORK_MODULE_ALIAS_FLAGS = -module-alias Testing=_Testing_Unavailable`. This is an Xcode-imposed limitation — UI test bundles cannot use the Swift Testing framework.
+- **Step handler assertions** use `XCTAssertTrue`, `XCTAssertEqual`, `XCTAssertFalse` directly (not `guard/throw`). This works because `StepHandler` is `@MainActor` and XCTest is the active test runtime in the UI test bundle. XCTest assertion failures are recorded on the current `XCTestCase` instance automatically.
+
 ### Key Patterns
 
 - **`@Observable TodoStore`** — Extracted store for testability. `@State` in `App`, plain `var` in `ContentView`. Enables `TodoStoreTests` without UI.
@@ -396,5 +436,6 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 - `StepHandler` is `@MainActor @Sendable ... async throws` — handlers run on the main thread, safe for XCTest assertions and UI frameworks
 - `StepRegistry` is `@unchecked Sendable` — not thread-safe for concurrent registration, but safe for concurrent matching after setup
 - `ScenarioRunner` is `Sendable` — safe to use from any context. When it calls `await handler(match)`, the runtime hops to the main actor because `StepHandler` is `@MainActor`
-- `GherkinTestCase` runs scenarios with `Task { @MainActor in }` + `waitForExpectations` to bridge XCTest's sync test methods with async step handlers. `waitForExpectations` pumps the main run loop, which services `@MainActor` handler hops
-- Test warnings about `SendableClosureCaptures` in test files are expected (test-only mutable state in closures)
+- `GherkinTestCase` runs scenarios with `Task { @MainActor in }` + `waitForExpectations` to bridge XCTest's sync test methods with async step handlers. Uses `nonisolated(unsafe)` for the `self` reference to satisfy Swift 6 strict concurrency
+- `GherkinTestScenario` is `Sendable` — safe for Swift Testing's concurrent test execution. Use `@Suite(.serialized)` when step definitions use shared mutable static state
+- Test files use `TestBox<T>` (`final class: @unchecked Sendable`) to share mutable state between `@MainActor` step handler closures and nonisolated test assertions

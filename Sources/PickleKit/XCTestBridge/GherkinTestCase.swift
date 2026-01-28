@@ -156,7 +156,7 @@ open class GherkinTestCase: XCTestCase {
     /// Parsed and expanded scenarios mapped by sanitized method name, keyed per class.
     /// Each GherkinTestCase subclass gets its own scenario map so that multiple
     /// subclasses (or the base class itself) don't overwrite each other's data.
-    private static var scenarioMaps: [ObjectIdentifier: [String: (scenario: Scenario, background: Background?, feature: Feature)]] = [:]
+    nonisolated(unsafe) private static var scenarioMaps: [ObjectIdentifier: [String: (scenario: Scenario, background: Background?, feature: Feature)]] = [:]
 
     override open class var defaultTestSuite: XCTestSuite {
         let classId = ObjectIdentifier(self)
@@ -266,7 +266,7 @@ open class GherkinTestCase: XCTestCase {
 
     // MARK: - Error Reporting
 
-    private static var parseErrors: [ObjectIdentifier: Error] = [:]
+    nonisolated(unsafe) private static var parseErrors: [ObjectIdentifier: Error] = [:]
 
     @objc private func reportParseError() {
         let classId = ObjectIdentifier(type(of: self))
@@ -314,9 +314,14 @@ open class GherkinTestCase: XCTestCase {
         }
 
         let runner = ScenarioRunner(registry: registry)
+        let collector = Self._resultCollector
 
-        // Use XCTest async support
-        let expectation = self.expectation(description: "Scenario: \(scenario.name)")
+        // Use XCTest async support.
+        // XCTest runs test methods on the main thread, so we know we're
+        // on MainActor. We use nonisolated(unsafe) to bridge the gap between
+        // XCTest's sync test methods and Swift 6's strict concurrency.
+        nonisolated(unsafe) let testCase = self
+        let expectation = testCase.expectation(description: "Scenario: \(scenario.name)")
 
         Task { @MainActor in
             do {
@@ -327,7 +332,7 @@ open class GherkinTestCase: XCTestCase {
                 )
 
                 if reportingEnabled {
-                    Self._resultCollector.record(
+                    collector.record(
                         scenarioResult: result,
                         featureName: feature.name,
                         featureTags: feature.tags,
@@ -336,7 +341,7 @@ open class GherkinTestCase: XCTestCase {
                 }
 
                 if !result.passed, let error = result.error {
-                    let message = self.formatError(error, scenario: scenario, feature: feature)
+                    let message = Self.formatError(error, scenario: scenario, feature: feature)
                     XCTFail(message)
                 }
             } catch {
@@ -345,12 +350,12 @@ open class GherkinTestCase: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 60)
+        testCase.waitForExpectations(timeout: 60)
     }
 
     // MARK: - Helpers
 
-    private func formatError(_ error: Error, scenario: Scenario, feature: Feature) -> String {
+    private static func formatError(_ error: Error, scenario: Scenario, feature: Feature) -> String {
         if let runnerError = error as? ScenarioRunnerError {
             switch runnerError {
             case .undefinedStep(let step, _, _):

@@ -1,12 +1,12 @@
-import XCTest
+import Testing
+import Foundation
 @testable import PickleKit
 
-final class HTMLReportGeneratorTests: XCTestCase {
+@Suite struct HTMLReportGeneratorTests {
 
-    private var generator: HTMLReportGenerator!
+    private let generator: HTMLReportGenerator
 
-    override func setUp() {
-        super.setUp()
+    init() {
         generator = HTMLReportGenerator()
     }
 
@@ -61,140 +61,135 @@ final class HTMLReportGeneratorTests: XCTestCase {
 
     // MARK: - HTML Structure
 
-    func testGeneratesValidHTMLStructure() {
+    @Test func generatesValidHTMLStructure() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("<!DOCTYPE html>"))
-        XCTAssertTrue(html.contains("<html lang=\"en\">"))
-        XCTAssertTrue(html.contains("</html>"))
-        XCTAssertTrue(html.contains("<head>"))
-        XCTAssertTrue(html.contains("</head>"))
-        XCTAssertTrue(html.contains("<body>"))
-        XCTAssertTrue(html.contains("</body>"))
+        #expect(html.contains("<!DOCTYPE html>"))
+        #expect(html.contains("<html lang=\"en\">"))
+        #expect(html.contains("</html>"))
+        #expect(html.contains("<head>"))
+        #expect(html.contains("</head>"))
+        #expect(html.contains("<body>"))
+        #expect(html.contains("</body>"))
     }
 
-    func testContainsInlineCSS() {
+    @Test func containsInlineCSS() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("<style>"))
-        XCTAssertTrue(html.contains("</style>"))
+        #expect(html.contains("<style>"))
+        #expect(html.contains("</style>"))
     }
 
-    func testContainsInlineJS() {
+    @Test func containsInlineJS() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("<script>"))
-        XCTAssertTrue(html.contains("expandAll"))
-        XCTAssertTrue(html.contains("collapseAll"))
-        XCTAssertTrue(html.contains("filterStatus"))
+        #expect(html.contains("<script>"))
+        #expect(html.contains("expandAll"))
+        #expect(html.contains("collapseAll"))
+        #expect(html.contains("filterStatus"))
     }
 
     // MARK: - Feature and Scenario Content
 
-    func testContainsFeatureName() {
+    @Test func containsFeatureName() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("User Login"))
+        #expect(html.contains("User Login"))
     }
 
-    func testContainsScenarioNames() {
+    @Test func containsScenarioNames() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("Happy Path"))
-        XCTAssertTrue(html.contains("Error Case"))
+        #expect(html.contains("Happy Path"))
+        #expect(html.contains("Error Case"))
     }
 
-    func testContainsStepText() {
+    @Test func containsStepText() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("a setup"))
-        XCTAssertTrue(html.contains("an action"))
-        XCTAssertTrue(html.contains("something breaks"))
+        #expect(html.contains("a setup"))
+        #expect(html.contains("an action"))
+        #expect(html.contains("something breaks"))
     }
 
-    func testContainsErrorMessages() {
+    @Test func containsErrorMessages() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("Expected 5 but got 3"))
+        #expect(html.contains("Expected 5 but got 3"))
     }
 
     // MARK: - Summary Counts
 
-    func testSummaryShowsFeatureCount() {
+    @Test func summaryShowsFeatureCount() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        // Features summary: 1 total, 0 passed (because it has a failing scenario), 1 failed
-        XCTAssertTrue(html.contains("Features"))
-        XCTAssertTrue(html.contains("Scenarios"))
-        XCTAssertTrue(html.contains("Steps"))
+        #expect(html.contains("Features"))
+        #expect(html.contains("Scenarios"))
+        #expect(html.contains("Steps"))
     }
 
-    func testSummaryShowsCorrectScenarioCounts() {
+    @Test func summaryShowsCorrectScenarioCounts() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        // 1 passed, 1 failed scenario
-        XCTAssertTrue(html.contains("1 passed, 1 failed"))
+        #expect(html.contains("1 passed, 1 failed"))
     }
 
     // MARK: - CSS Classes for Statuses
 
-    func testContainsStatusCSSClasses() {
+    @Test func containsStatusCSSClasses() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("status-passed"))
-        XCTAssertTrue(html.contains("status-failed"))
-        XCTAssertTrue(html.contains("class=\"step-row passed\""))
-        XCTAssertTrue(html.contains("class=\"step-row failed\""))
-        XCTAssertTrue(html.contains("class=\"step-row skipped\""))
+        #expect(html.contains("status-passed"))
+        #expect(html.contains("status-failed"))
+        #expect(html.contains("class=\"step-row passed\""))
+        #expect(html.contains("class=\"step-row failed\""))
+        #expect(html.contains("class=\"step-row skipped\""))
     }
 
-    func testFailedScenarioIsOpenByDefault() {
+    @Test func failedScenarioIsOpenByDefault() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        // Failed scenarios should have `open` attribute
-        XCTAssertTrue(html.contains("data-status=\"failed\" open"))
+        #expect(html.contains("data-status=\"failed\" open"))
     }
 
-    func testPassingScenarioIsClosedByDefault() {
+    @Test func passingScenarioIsClosedByDefault() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        // Passing scenarios should NOT have `open` attribute
-        // They should have data-status="passed"> (without open)
-        XCTAssertTrue(html.contains("data-status=\"passed\">"))
+        #expect(html.contains("data-status=\"passed\">"))
     }
 
     // MARK: - Tags
 
-    func testContainsFeatureTags() {
+    @Test func containsFeatureTags() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("@auth"))
+        #expect(html.contains("@auth"))
     }
 
-    func testContainsScenarioTags() {
+    @Test func containsScenarioTags() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("@smoke"))
-        XCTAssertTrue(html.contains("@regression"))
+        #expect(html.contains("@smoke"))
+        #expect(html.contains("@regression"))
     }
 
     // MARK: - HTML Escaping
 
-    func testHTMLEscapesSpecialCharacters() {
+    @Test func htmlEscapesSpecialCharacters() {
         let feature = FeatureResult(
             featureName: "Test <script>alert('xss')</script>",
             scenarioResults: [
@@ -218,79 +213,69 @@ final class HTMLReportGeneratorTests: XCTestCase {
 
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("&lt;script&gt;"))
-        XCTAssertTrue(html.contains("&amp;"))
-        XCTAssertTrue(html.contains("&quot;quotes&quot;"))
-        XCTAssertFalse(html.contains("<script>alert"))
+        #expect(html.contains("&lt;script&gt;"))
+        #expect(html.contains("&amp;"))
+        #expect(html.contains("&quot;quotes&quot;"))
+        #expect(!html.contains("<script>alert"))
     }
 
     // MARK: - Write to File
 
-    func testWriteReportToFile() throws {
+    @Test func writeReportToFile() throws {
         let result = makeSampleResult()
         let tempDir = NSTemporaryDirectory()
         let path = (tempDir as NSString).appendingPathComponent("pickle-test-report-\(UUID().uuidString).html")
+        defer { try? FileManager.default.removeItem(atPath: path) }
 
         try generator.write(result: result, to: path)
 
         let contents = try String(contentsOfFile: path, encoding: .utf8)
-        XCTAssertTrue(contents.contains("<!DOCTYPE html>"))
-        XCTAssertTrue(contents.contains("User Login"))
-
-        // Clean up
-        try? FileManager.default.removeItem(atPath: path)
+        #expect(contents.contains("<!DOCTYPE html>"))
+        #expect(contents.contains("User Login"))
     }
 
-    func testWriteCreatesIntermediateDirectories() throws {
+    @Test func writeCreatesIntermediateDirectories() throws {
         let result = makeSampleResult()
         let tempDir = NSTemporaryDirectory()
         let nestedDir = (tempDir as NSString).appendingPathComponent("pickle-test-\(UUID().uuidString)/build")
         let path = (nestedDir as NSString).appendingPathComponent("report.html")
+        defer { try? FileManager.default.removeItem(atPath: (nestedDir as NSString).deletingLastPathComponent) }
 
-        // Directory does not exist yet
-        XCTAssertFalse(FileManager.default.fileExists(atPath: nestedDir))
+        #expect(!FileManager.default.fileExists(atPath: nestedDir))
 
         try generator.write(result: result, to: path)
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        #expect(FileManager.default.fileExists(atPath: path))
         let contents = try String(contentsOfFile: path, encoding: .utf8)
-        XCTAssertTrue(contents.contains("<!DOCTYPE html>"))
-
-        // Clean up
-        let rootDir = (tempDir as NSString).appendingPathComponent(
-            (nestedDir as NSString).lastPathComponent
-        )
-        try? FileManager.default.removeItem(atPath: (nestedDir as NSString).deletingLastPathComponent)
+        #expect(contents.contains("<!DOCTYPE html>"))
     }
 
-    func testWriteToDeeplyNestedPath() throws {
+    @Test func writeToDeeplyNestedPath() throws {
         let result = makeSampleResult()
         let tempDir = NSTemporaryDirectory()
         let uuid = UUID().uuidString
         let path = (tempDir as NSString).appendingPathComponent("pickle-\(uuid)/a/b/c/report.html")
+        defer { try? FileManager.default.removeItem(atPath: (tempDir as NSString).appendingPathComponent("pickle-\(uuid)")) }
 
         try generator.write(result: result, to: path)
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
-
-        // Clean up
-        try? FileManager.default.removeItem(atPath: (tempDir as NSString).appendingPathComponent("pickle-\(uuid)"))
+        #expect(FileManager.default.fileExists(atPath: path))
     }
 
     // MARK: - Empty Result
 
-    func testEmptyResultGeneratesValidHTML() {
+    @Test func emptyResultGeneratesValidHTML() {
         let result = TestRunResult(featureResults: [], startTime: Date(), endTime: Date())
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("<!DOCTYPE html>"))
-        XCTAssertTrue(html.contains("</html>"))
-        XCTAssertTrue(html.contains("Features"))
+        #expect(html.contains("<!DOCTYPE html>"))
+        #expect(html.contains("</html>"))
+        #expect(html.contains("Features"))
     }
 
     // MARK: - Undefined Step Status
 
-    func testUndefinedStepCSSClass() {
+    @Test func undefinedStepCSSClass() {
         let feature = FeatureResult(
             featureName: "Undefined Feature",
             scenarioResults: [
@@ -309,12 +294,12 @@ final class HTMLReportGeneratorTests: XCTestCase {
         let result = TestRunResult(featureResults: [feature], startTime: Date(), endTime: Date())
         let html = generator.generate(from: result)
 
-        XCTAssertTrue(html.contains("class=\"step-row undefined\""))
+        #expect(html.contains("class=\"step-row undefined\""))
     }
 
     // MARK: - Report Result Collector
 
-    func testCollectorGroupsByFeature() {
+    @Test func collectorGroupsByFeature() {
         let collector = ReportResultCollector()
 
         let scenario1 = ScenarioResult(scenarioName: "S1", passed: true, stepsExecuted: 1)
@@ -327,14 +312,14 @@ final class HTMLReportGeneratorTests: XCTestCase {
 
         let result = collector.buildTestRunResult()
 
-        XCTAssertEqual(result.featureResults.count, 2)
-        XCTAssertEqual(result.featureResults[0].featureName, "Feature A")
-        XCTAssertEqual(result.featureResults[0].scenarioResults.count, 2)
-        XCTAssertEqual(result.featureResults[1].featureName, "Feature B")
-        XCTAssertEqual(result.featureResults[1].scenarioResults.count, 1)
+        #expect(result.featureResults.count == 2)
+        #expect(result.featureResults[0].featureName == "Feature A")
+        #expect(result.featureResults[0].scenarioResults.count == 2)
+        #expect(result.featureResults[1].featureName == "Feature B")
+        #expect(result.featureResults[1].scenarioResults.count == 1)
     }
 
-    func testCollectorPreservesFeatureOrder() {
+    @Test func collectorPreservesFeatureOrder() {
         let collector = ReportResultCollector()
 
         collector.record(scenarioResult: ScenarioResult(scenarioName: "S1", passed: true), featureName: "Zebra")
@@ -343,24 +328,24 @@ final class HTMLReportGeneratorTests: XCTestCase {
 
         let result = collector.buildTestRunResult()
 
-        XCTAssertEqual(result.featureResults.count, 2)
-        XCTAssertEqual(result.featureResults[0].featureName, "Zebra")
-        XCTAssertEqual(result.featureResults[1].featureName, "Alpha")
+        #expect(result.featureResults.count == 2)
+        #expect(result.featureResults[0].featureName == "Zebra")
+        #expect(result.featureResults[1].featureName == "Alpha")
     }
 
-    func testCollectorReset() {
+    @Test func collectorReset() {
         let collector = ReportResultCollector()
 
         collector.record(scenarioResult: ScenarioResult(scenarioName: "S1", passed: true), featureName: "F1")
         collector.reset()
 
         let result = collector.buildTestRunResult()
-        XCTAssertEqual(result.featureResults.count, 0)
+        #expect(result.featureResults.count == 0)
     }
 
     // MARK: - TestRunResult Aggregations
 
-    func testTestRunResultAggregations() {
+    @Test func testRunResultAggregations() {
         let feature1 = FeatureResult(
             featureName: "F1",
             scenarioResults: [
@@ -394,19 +379,19 @@ final class HTMLReportGeneratorTests: XCTestCase {
             endTime: Date(timeIntervalSince1970: 105)
         )
 
-        XCTAssertEqual(result.totalFeatureCount, 2)
-        XCTAssertEqual(result.passedFeatureCount, 1) // F2 only
-        XCTAssertEqual(result.failedFeatureCount, 1) // F1
+        #expect(result.totalFeatureCount == 2)
+        #expect(result.passedFeatureCount == 1)
+        #expect(result.failedFeatureCount == 1)
 
-        XCTAssertEqual(result.totalScenarioCount, 3)
-        XCTAssertEqual(result.passedScenarioCount, 2)
-        XCTAssertEqual(result.failedScenarioCount, 1)
+        #expect(result.totalScenarioCount == 3)
+        #expect(result.passedScenarioCount == 2)
+        #expect(result.failedScenarioCount == 1)
 
-        XCTAssertEqual(result.totalStepCount, 6)
-        XCTAssertEqual(result.passedStepCount, 4) // a, b, c, f
-        XCTAssertEqual(result.failedStepCount, 1) // d
-        XCTAssertEqual(result.skippedStepCount, 1) // e
+        #expect(result.totalStepCount == 6)
+        #expect(result.passedStepCount == 4)
+        #expect(result.failedStepCount == 1)
+        #expect(result.skippedStepCount == 1)
 
-        XCTAssertEqual(result.duration, 5.0, accuracy: 0.001)
+        #expect(abs(result.duration - 5.0) < 0.001)
     }
 }

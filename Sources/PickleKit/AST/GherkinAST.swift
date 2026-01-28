@@ -53,6 +53,18 @@ public enum ScenarioDefinition: Sendable, Equatable {
         case .outline(let o): return o.sourceLine
         }
     }
+
+    /// Returns the associated `Scenario` if this is a `.scenario` case, or `nil`.
+    public var asScenario: Scenario? {
+        if case .scenario(let s) = self { return s }
+        return nil
+    }
+
+    /// Returns the associated `ScenarioOutline` if this is an `.outline` case, or `nil`.
+    public var asOutline: ScenarioOutline? {
+        if case .outline(let o) = self { return o }
+        return nil
+    }
 }
 
 // MARK: - Scenario

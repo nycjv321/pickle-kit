@@ -25,7 +25,7 @@ concurrency:
 jobs:
   unit-tests:
     name: Unit Tests
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.2'
 
       - name: Install tools
         run: brew install xcbeautify xcodegen
@@ -42,9 +42,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-v2-spm-${{ hashFiles('Package.resolved') }}
+          key: ${{ runner.os }}-v3-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-v2-spm-
+            ${{ runner.os }}-v3-spm-
 
       - name: Resolve dependencies
         run: swift package resolve
@@ -52,8 +52,8 @@ jobs:
       - name: Run PickleKit tests
         run: |
           set -o pipefail
-          swift test --enable-code-coverage 2>&1 | \
-            xcbeautify --report junit --report-path .
+          swift test --enable-code-coverage --xunit-output junit.xml 2>&1 | \
+            xcbeautify
 
       - name: Generate TodoApp project
         run: |
@@ -124,7 +124,7 @@ jobs:
   ui-tests:
     name: UI Tests
     needs: unit-tests
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -132,7 +132,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.2'
 
       - name: Install tools
         run: brew install xcbeautify xcodegen
@@ -177,7 +177,7 @@ jobs:
   build:
     name: Build (Release)
     needs: unit-tests
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -185,15 +185,15 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.2'
 
       - name: Cache SPM
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-v2-spm-${{ hashFiles('Package.resolved') }}
+          key: ${{ runner.os }}-v3-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-v2-spm-
+            ${{ runner.os }}-v3-spm-
 
       - name: Build release
         run: swift build -c release

@@ -1,13 +1,13 @@
-import XCTest
+import Testing
 @testable import PickleKit
 
-final class OutlineExpanderTests: XCTestCase {
+@Suite struct OutlineExpanderTests {
 
     let expander = OutlineExpander()
 
     // MARK: - Basic Expansion
 
-    func testExpandSingleExamplesTable() {
+    @Test func expandSingleExamplesTable() {
         let outline = ScenarioOutline(
             name: "Eating",
             steps: [
@@ -28,16 +28,16 @@ final class OutlineExpanderTests: XCTestCase {
 
         let scenarios = expander.expandOutline(outline)
 
-        XCTAssertEqual(scenarios.count, 2)
-        XCTAssertEqual(scenarios[0].steps[0].text, "I have 10 items")
-        XCTAssertEqual(scenarios[0].steps[1].text, "I remove 3")
-        XCTAssertEqual(scenarios[0].steps[2].text, "I have 7")
-        XCTAssertEqual(scenarios[1].steps[0].text, "I have 5 items")
+        #expect(scenarios.count == 2)
+        #expect(scenarios[0].steps[0].text == "I have 10 items")
+        #expect(scenarios[0].steps[1].text == "I remove 3")
+        #expect(scenarios[0].steps[2].text == "I have 7")
+        #expect(scenarios[1].steps[0].text == "I have 5 items")
     }
 
     // MARK: - Naming
 
-    func testSingleExamplesTableNaming() {
+    @Test func singleExamplesTableNaming() {
         let outline = ScenarioOutline(
             name: "Login",
             steps: [Step(keyword: .given, text: "user <name>")],
@@ -54,11 +54,11 @@ final class OutlineExpanderTests: XCTestCase {
 
         let scenarios = expander.expandOutline(outline)
 
-        XCTAssertEqual(scenarios[0].name, "Login [Row 1]")
-        XCTAssertEqual(scenarios[1].name, "Login [Row 2]")
+        #expect(scenarios[0].name == "Login [Row 1]")
+        #expect(scenarios[1].name == "Login [Row 2]")
     }
 
-    func testMultipleExamplesTablesNaming() {
+    @Test func multipleExamplesTablesNaming() {
         let outline = ScenarioOutline(
             name: "Access",
             steps: [Step(keyword: .given, text: "role <role>")],
@@ -81,15 +81,15 @@ final class OutlineExpanderTests: XCTestCase {
 
         let scenarios = expander.expandOutline(outline)
 
-        XCTAssertEqual(scenarios.count, 3)
-        XCTAssertEqual(scenarios[0].name, "Access [Examples 1, Row 1]")
-        XCTAssertEqual(scenarios[1].name, "Access [Examples 2, Row 1]")
-        XCTAssertEqual(scenarios[2].name, "Access [Examples 2, Row 2]")
+        #expect(scenarios.count == 3)
+        #expect(scenarios[0].name == "Access [Examples 1, Row 1]")
+        #expect(scenarios[1].name == "Access [Examples 2, Row 1]")
+        #expect(scenarios[2].name == "Access [Examples 2, Row 2]")
     }
 
     // MARK: - Tag Combination
 
-    func testOutlineTagsCombinedWithExamplesTags() {
+    @Test func outlineTagsCombinedWithExamplesTags() {
         let outline = ScenarioOutline(
             name: "Tagged",
             tags: ["smoke"],
@@ -104,12 +104,12 @@ final class OutlineExpanderTests: XCTestCase {
 
         let scenarios = expander.expandOutline(outline)
 
-        XCTAssertEqual(scenarios[0].tags, ["smoke", "fast"])
+        #expect(scenarios[0].tags == ["smoke", "fast"])
     }
 
     // MARK: - Feature-level Expansion
 
-    func testExpandFeaturePassesThroughRegularScenarios() {
+    @Test func expandFeaturePassesThroughRegularScenarios() throws {
         let feature = Feature(
             name: "Mixed",
             scenarios: [
@@ -130,26 +130,20 @@ final class OutlineExpanderTests: XCTestCase {
 
         let expanded = expander.expand(feature)
 
-        XCTAssertEqual(expanded.scenarios.count, 3)
+        #expect(expanded.scenarios.count == 3)
 
         // First should be the regular scenario unchanged
-        if case .scenario(let s) = expanded.scenarios[0] {
-            XCTAssertEqual(s.name, "Regular")
-        } else {
-            XCTFail("Expected scenario")
-        }
+        let s0 = try #require(expanded.scenarios[0].asScenario)
+        #expect(s0.name == "Regular")
 
         // Next two should be expanded from outline
-        if case .scenario(let s) = expanded.scenarios[1] {
-            XCTAssertEqual(s.steps[0].text, "value 1")
-        } else {
-            XCTFail("Expected scenario")
-        }
+        let s1 = try #require(expanded.scenarios[1].asScenario)
+        #expect(s1.steps[0].text == "value 1")
     }
 
     // MARK: - Doc String Substitution
 
-    func testDocStringPlaceholderSubstitution() {
+    @Test func docStringPlaceholderSubstitution() {
         let outline = ScenarioOutline(
             name: "API",
             steps: [
@@ -163,12 +157,12 @@ final class OutlineExpanderTests: XCTestCase {
         )
 
         let scenarios = expander.expandOutline(outline)
-        XCTAssertEqual(scenarios[0].steps[0].docString, "{\"name\": \"Alice\"}")
+        #expect(scenarios[0].steps[0].docString == "{\"name\": \"Alice\"}")
     }
 
     // MARK: - Data Table Substitution
 
-    func testDataTablePlaceholderSubstitution() {
+    @Test func dataTablePlaceholderSubstitution() {
         let outline = ScenarioOutline(
             name: "Table",
             steps: [
@@ -193,12 +187,12 @@ final class OutlineExpanderTests: XCTestCase {
 
         let scenarios = expander.expandOutline(outline)
         let table = scenarios[0].steps[0].dataTable!
-        XCTAssertEqual(table.rows[1], ["Alice", "admin"])
+        #expect(table.rows[1] == ["Alice", "admin"])
     }
 
     // MARK: - Empty Examples
 
-    func testEmptyExamplesProducesNoScenarios() {
+    @Test func emptyExamplesProducesNoScenarios() {
         let outline = ScenarioOutline(
             name: "Empty",
             steps: [Step(keyword: .given, text: "<x>")],
@@ -210,6 +204,6 @@ final class OutlineExpanderTests: XCTestCase {
         )
 
         let scenarios = expander.expandOutline(outline)
-        XCTAssertTrue(scenarios.isEmpty)
+        #expect(scenarios.isEmpty)
     }
 }

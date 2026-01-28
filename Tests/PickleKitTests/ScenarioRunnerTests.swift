@@ -1,25 +1,31 @@
-import XCTest
+import Foundation
+import Testing
 @testable import PickleKit
 
-final class ScenarioRunnerTests: XCTestCase {
+/// Thread-safe mutable box for test state captured across isolation boundaries.
+private final class TestBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
+}
 
-    var registry: StepRegistry!
-    var runner: ScenarioRunner!
+@Suite struct ScenarioRunnerTests {
 
-    override func setUp() {
-        super.setUp()
+    let registry: StepRegistry
+    let runner: ScenarioRunner
+
+    init() {
         registry = StepRegistry()
         runner = ScenarioRunner(registry: registry)
     }
 
     // MARK: - Passing Scenarios
 
-    func testPassingScenario() async throws {
-        var log: [String] = []
+    @Test func passingScenario() async throws {
+        let log = TestBox<[String]>([])
 
-        registry.given("a setup") { _ in log.append("given") }
-        registry.when("an action") { _ in log.append("when") }
-        registry.then("a result") { _ in log.append("then") }
+        registry.given("a setup") { _ in log.value.append("given") }
+        registry.when("an action") { _ in log.value.append("when") }
+        registry.then("a result") { _ in log.value.append("then") }
 
         let scenario = Scenario(
             name: "Simple",
@@ -32,18 +38,18 @@ final class ScenarioRunnerTests: XCTestCase {
 
         let result = try await runner.run(scenario: scenario)
 
-        XCTAssertTrue(result.passed)
-        XCTAssertEqual(result.stepsExecuted, 3)
-        XCTAssertEqual(log, ["given", "when", "then"])
+        #expect(result.passed)
+        #expect(result.stepsExecuted == 3)
+        #expect(log.value == ["given", "when", "then"])
     }
 
     // MARK: - Background Steps
 
-    func testBackgroundStepsRunFirst() async throws {
-        var log: [String] = []
+    @Test func backgroundStepsRunFirst() async throws {
+        let log = TestBox<[String]>([])
 
-        registry.step("background step") { _ in log.append("bg") }
-        registry.step("scenario step") { _ in log.append("sc") }
+        registry.step("background step") { _ in log.value.append("bg") }
+        registry.step("scenario step") { _ in log.value.append("sc") }
 
         let background = Background(
             steps: [Step(keyword: .given, text: "background step", sourceLine: 1)]
@@ -56,14 +62,14 @@ final class ScenarioRunnerTests: XCTestCase {
 
         let result = try await runner.run(scenario: scenario, background: background)
 
-        XCTAssertTrue(result.passed)
-        XCTAssertEqual(log, ["bg", "sc"])
-        XCTAssertEqual(result.stepsExecuted, 2)
+        #expect(result.passed)
+        #expect(log.value == ["bg", "sc"])
+        #expect(result.stepsExecuted == 2)
     }
 
     // MARK: - Undefined Steps
 
-    func testUndefinedStepFails() async throws {
+    @Test func undefinedStepFails() async throws {
         let scenario = Scenario(
             name: "Missing",
             steps: [Step(keyword: .given, text: "undefined step", sourceLine: 5)]
@@ -71,14 +77,14 @@ final class ScenarioRunnerTests: XCTestCase {
 
         let result = try await runner.run(scenario: scenario)
 
-        XCTAssertFalse(result.passed)
-        XCTAssertNotNil(result.error)
-        XCTAssertTrue(result.error is ScenarioRunnerError)
+        #expect(!result.passed)
+        #expect(result.error != nil)
+        #expect(result.error is ScenarioRunnerError)
     }
 
     // MARK: - Step Failure
 
-    func testStepFailurePropagated() async throws {
+    @Test func stepFailurePropagated() async throws {
         struct TestError: Error {}
 
         registry.given("will fail") { _ in throw TestError() }
@@ -90,17 +96,17 @@ final class ScenarioRunnerTests: XCTestCase {
 
         let result = try await runner.run(scenario: scenario)
 
-        XCTAssertFalse(result.passed)
-        XCTAssertNotNil(result.error)
+        #expect(!result.passed)
+        #expect(result.error != nil)
     }
 
-    func testStepFailureStopsExecution() async throws {
+    @Test func stepFailureStopsExecution() async throws {
         struct TestError: Error {}
-        var log: [String] = []
+        let log = TestBox<[String]>([])
 
-        registry.given("first") { _ in log.append("first") }
+        registry.given("first") { _ in log.value.append("first") }
         registry.when("fails") { _ in throw TestError() }
-        registry.then("never reached") { _ in log.append("third") }
+        registry.then("never reached") { _ in log.value.append("third") }
 
         let scenario = Scenario(
             name: "Short circuit",
@@ -113,27 +119,27 @@ final class ScenarioRunnerTests: XCTestCase {
 
         let result = try await runner.run(scenario: scenario)
 
-        XCTAssertFalse(result.passed)
-        XCTAssertEqual(log, ["first"])
-        XCTAssertEqual(result.stepsExecuted, 1)
+        #expect(!result.passed)
+        #expect(log.value == ["first"])
+        #expect(result.stepsExecuted == 1)
     }
 
     // MARK: - Captures in Execution
 
-    func testCapturesAvailableInHandler() async throws {
-        var sum = 0
+    @Test func capturesAvailableInHandler() async throws {
+        let sum = TestBox(0)
 
         registry.step("I have (\\d+) items") { match in
-            sum = Int(match.captures[0])!
+            sum.value = Int(match.captures[0])!
         }
         registry.step("I add (\\d+)") { match in
-            sum += Int(match.captures[0])!
+            sum.value += Int(match.captures[0])!
         }
         registry.step("I should have (\\d+)") { match in
             let expected = Int(match.captures[0])!
-            guard sum == expected else {
+            guard sum.value == expected else {
                 throw NSError(domain: "test", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Expected \(expected) but got \(sum)"
+                    NSLocalizedDescriptionKey: "Expected \(expected) but got \(sum.value)"
                 ])
             }
         }
@@ -148,12 +154,12 @@ final class ScenarioRunnerTests: XCTestCase {
         )
 
         let result = try await runner.run(scenario: scenario)
-        XCTAssertTrue(result.passed)
+        #expect(result.passed)
     }
 
     // MARK: - Feature Execution
 
-    func testRunFeature() async throws {
+    @Test func runFeature() async throws {
         registry.step("something") { _ in }
         registry.step("happens") { _ in }
 
@@ -173,14 +179,14 @@ final class ScenarioRunnerTests: XCTestCase {
 
         let result = try await runner.run(feature: feature)
 
-        XCTAssertEqual(result.featureName, "Multi")
-        XCTAssertEqual(result.scenarioResults.count, 2)
-        XCTAssertTrue(result.allPassed)
-        XCTAssertEqual(result.passedCount, 2)
-        XCTAssertEqual(result.failedCount, 0)
+        #expect(result.featureName == "Multi")
+        #expect(result.scenarioResults.count == 2)
+        #expect(result.allPassed)
+        #expect(result.passedCount == 2)
+        #expect(result.failedCount == 0)
     }
 
-    func testRunFeatureWithTagFilter() async throws {
+    @Test func runFeatureWithTagFilter() async throws {
         registry.step(".*") { _ in }
 
         let feature = Feature(
@@ -198,13 +204,13 @@ final class ScenarioRunnerTests: XCTestCase {
         let filter = TagFilter(includeTags: ["smoke"])
         let result = try await runner.run(feature: feature, tagFilter: filter)
 
-        XCTAssertEqual(result.scenarioResults.count, 1)
-        XCTAssertEqual(result.scenarioResults[0].scenarioName, "Included")
+        #expect(result.scenarioResults.count == 1)
+        #expect(result.scenarioResults[0].scenarioName == "Included")
     }
 
     // MARK: - Scenario Name in Result
 
-    func testScenarioNameInResult() async throws {
+    @Test func scenarioNameInResult() async throws {
         registry.step("x") { _ in }
 
         let scenario = Scenario(name: "My Scenario", steps: [
@@ -212,16 +218,16 @@ final class ScenarioRunnerTests: XCTestCase {
         ])
 
         let result = try await runner.run(scenario: scenario)
-        XCTAssertEqual(result.scenarioName, "My Scenario")
+        #expect(result.scenarioName == "My Scenario")
     }
 
     // MARK: - Data Table in Handler
 
-    func testDataTableAvailableInHandler() async throws {
-        var receivedTable: DataTable?
+    @Test func dataTableAvailableInHandler() async throws {
+        let receivedTable = TestBox<DataTable?>(nil)
 
         registry.step("users:") { match in
-            receivedTable = match.dataTable
+            receivedTable.value = match.dataTable
         }
 
         let table = DataTable(rows: [["name"], ["Alice"], ["Bob"]])
@@ -232,8 +238,8 @@ final class ScenarioRunnerTests: XCTestCase {
 
         let result = try await runner.run(scenario: scenario)
 
-        XCTAssertTrue(result.passed)
-        XCTAssertNotNil(receivedTable)
-        XCTAssertEqual(receivedTable?.dataRows.count, 2)
+        #expect(result.passed)
+        #expect(receivedTable.value != nil)
+        #expect(receivedTable.value?.dataRows.count == 2)
     }
 }

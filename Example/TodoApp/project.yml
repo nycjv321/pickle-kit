@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.picklekit.example
   deploymentTarget:
     macOS: "14.0"
-  xcodeVersion: "15.0"
+  xcodeVersion: "26.2"
   minimumXcodeGenVersion: "2.35.0"
 
 packages:

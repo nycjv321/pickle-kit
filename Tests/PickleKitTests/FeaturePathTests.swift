@@ -1,159 +1,151 @@
-import XCTest
+import Testing
+import Foundation
 @testable import PickleKit
 
-final class FeaturePathTests: XCTestCase {
+@Suite
+struct FeaturePathTests {
 
     // MARK: - Path Parsing
 
-    func testParseSimpleFilePath() throws {
+    @Test func parseSimpleFilePath() throws {
         let fixtureDir = try fixturesDirectory()
         let path = (fixtureDir as NSString).appendingPathComponent("basic.feature")
         let result = FeaturePath.parse(path)
 
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.path, path)
-        XCTAssertEqual(result?.lines, [])
-        XCTAssertFalse(result?.isDirectory ?? true)
+        #expect(result != nil)
+        #expect(result?.path == path)
+        #expect(result?.lines == [])
+        #expect(!(result?.isDirectory ?? true))
     }
 
-    func testParseFilePathWithOneLine() {
+    @Test func parseFilePathWithOneLine() {
         let result = FeaturePath.parse("/tmp/login.feature:10")
 
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.path, "/tmp/login.feature")
-        XCTAssertEqual(result?.lines, [10])
-        XCTAssertFalse(result?.isDirectory ?? true)
+        #expect(result != nil)
+        #expect(result?.path == "/tmp/login.feature")
+        #expect(result?.lines == [10])
+        #expect(!(result?.isDirectory ?? true))
     }
 
-    func testParseFilePathWithMultipleLines() {
+    @Test func parseFilePathWithMultipleLines() {
         let result = FeaturePath.parse("/tmp/login.feature:10:25")
 
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.path, "/tmp/login.feature")
-        XCTAssertEqual(result?.lines, [10, 25])
+        #expect(result != nil)
+        #expect(result?.path == "/tmp/login.feature")
+        #expect(result?.lines == [10, 25])
     }
 
-    func testParseDirectoryPath() throws {
+    @Test func parseDirectoryPath() throws {
         let fixtureDir = try fixturesDirectory()
         let result = FeaturePath.parse(fixtureDir)
 
-        XCTAssertNotNil(result)
-        XCTAssertTrue(result?.isDirectory ?? false)
+        #expect(result != nil)
+        #expect(result?.isDirectory ?? false)
     }
 
-    func testParseDirectoryPathWithTrailingSlash() {
-        // Trailing "/" should mark as directory even if path doesn't exist
+    @Test func parseDirectoryPathWithTrailingSlash() {
         let result = FeaturePath.parse("/tmp/nonexistent_features/")
 
-        XCTAssertNotNil(result)
-        XCTAssertTrue(result?.isDirectory ?? false)
+        #expect(result != nil)
+        #expect(result?.isDirectory ?? false)
     }
 
-    func testParseAbsolutePath() {
+    @Test func parseAbsolutePath() {
         let result = FeaturePath.parse("/absolute/path/to/file.feature")
 
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.path, "/absolute/path/to/file.feature")
+        #expect(result != nil)
+        #expect(result?.path == "/absolute/path/to/file.feature")
     }
 
-    func testParseRelativePath() {
+    @Test func parseRelativePath() {
         let result = FeaturePath.parse("relative/file.feature", relativeTo: "/base/dir")
 
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.path, "/base/dir/relative/file.feature")
+        #expect(result != nil)
+        #expect(result?.path == "/base/dir/relative/file.feature")
     }
 
-    func testParseEmptyString() {
+    @Test func parseEmptyString() {
         let result = FeaturePath.parse("")
-        XCTAssertNil(result)
+        #expect(result == nil)
     }
 
-    func testParseWhitespaceOnlyString() {
+    @Test func parseWhitespaceOnlyString() {
         let result = FeaturePath.parse("   ")
-        XCTAssertNil(result)
+        #expect(result == nil)
     }
 
-    func testParseListMultiplePaths() {
+    @Test func parseListMultiplePaths() {
         let results = FeaturePath.parseList(
             "/tmp/a.feature /tmp/b.feature:5",
             relativeTo: "/base"
         )
 
-        XCTAssertEqual(results.count, 2)
-        XCTAssertEqual(results[0].path, "/tmp/a.feature")
-        XCTAssertEqual(results[0].lines, [])
-        XCTAssertEqual(results[1].path, "/tmp/b.feature")
-        XCTAssertEqual(results[1].lines, [5])
+        #expect(results.count == 2)
+        #expect(results[0].path == "/tmp/a.feature")
+        #expect(results[0].lines == [])
+        #expect(results[1].path == "/tmp/b.feature")
+        #expect(results[1].lines == [5])
     }
 
-    func testParseListEmptyString() {
+    @Test func parseListEmptyString() {
         let results = FeaturePath.parseList("")
-        XCTAssertTrue(results.isEmpty)
+        #expect(results.isEmpty)
     }
 
     // MARK: - Environment Variable
 
-    func testFromEnvironmentWhenUnset() {
-        // CUCUMBER_FEATURES is not set in the test environment by default
+    @Test func fromEnvironmentWhenUnset() {
         let result = FeaturePath.fromEnvironment()
-        // This test verifies behavior when the env var is absent.
-        // We can't control env vars in-process, so just verify the method is callable
-        // and returns nil when not set (which is the default test state).
         if ProcessInfo.processInfo.environment["CUCUMBER_FEATURES"] == nil {
-            XCTAssertNil(result)
+            #expect(result == nil)
         }
     }
 
     // MARK: - GherkinParser Path Methods
 
-    func testParseFileStoringFullPath() throws {
+    @Test func parseFileStoringFullPath() throws {
         let fixtureDir = try fixturesDirectory()
         let fullPath = (fixtureDir as NSString).appendingPathComponent("basic.feature")
 
         let parser = GherkinParser()
         let feature = try parser.parseFileStoringFullPath(at: fullPath)
 
-        XCTAssertEqual(feature.name, "Basic arithmetic")
-        XCTAssertEqual(feature.sourceFile, fullPath)
-        XCTAssertEqual(feature.scenarios.count, 2)
+        #expect(feature.name == "Basic arithmetic")
+        #expect(feature.sourceFile == fullPath)
+        #expect(feature.scenarios.count == 2)
     }
 
-    func testParseFileStoringFullPathPreservesFullPath() throws {
+    @Test func parseFileStoringFullPathPreservesFullPath() throws {
         let fixtureDir = try fixturesDirectory()
         let fullPath = (fixtureDir as NSString).appendingPathComponent("basic.feature")
 
         let parser = GherkinParser()
 
-        // parseFile stores only lastPathComponent
         let featureShort = try parser.parseFile(at: fullPath)
-        XCTAssertEqual(featureShort.sourceFile, "basic.feature")
+        #expect(featureShort.sourceFile == "basic.feature")
 
-        // parseFileStoringFullPath stores the full path
         let featureFull = try parser.parseFileStoringFullPath(at: fullPath)
-        XCTAssertEqual(featureFull.sourceFile, fullPath)
+        #expect(featureFull.sourceFile == fullPath)
     }
 
-    func testParseDirectory() throws {
+    @Test func parseDirectory() throws {
         let fixtureDir = try fixturesDirectory()
 
         let parser = GherkinParser()
         let features = try parser.parseDirectory(at: fixtureDir)
 
-        // Should find all .feature files in Fixtures/
-        XCTAssertGreaterThanOrEqual(features.count, 6)
+        #expect(features.count >= 6)
 
-        // Should be sorted alphabetically
         let fileNames = features.compactMap { ($0.sourceFile as NSString?)?.lastPathComponent }
-        XCTAssertEqual(fileNames, fileNames.sorted())
+        #expect(fileNames == fileNames.sorted())
 
-        // Each feature should have the full path as sourceFile
         for feature in features {
-            XCTAssertNotNil(feature.sourceFile)
-            XCTAssertTrue(feature.sourceFile?.hasPrefix(fixtureDir) ?? false)
+            #expect(feature.sourceFile != nil)
+            #expect(feature.sourceFile?.hasPrefix(fixtureDir) ?? false)
         }
     }
 
-    func testParsePaths() throws {
+    @Test func parsePaths() throws {
         let fixtureDir = try fixturesDirectory()
         let basicPath = (fixtureDir as NSString).appendingPathComponent("basic.feature")
 
@@ -164,12 +156,12 @@ final class FeaturePathTests: XCTestCase {
 
         let result = try parser.parsePaths(paths)
 
-        XCTAssertEqual(result.features.count, 1)
-        XCTAssertEqual(result.features[0].name, "Basic arithmetic")
-        XCTAssertEqual(result.lineFilters[basicPath], Set([6]))
+        #expect(result.features.count == 1)
+        #expect(result.features[0].name == "Basic arithmetic")
+        #expect(result.lineFilters[basicPath] == Set([6]))
     }
 
-    func testParsePathsDeduplicates() throws {
+    @Test func parsePathsDeduplicates() throws {
         let fixtureDir = try fixturesDirectory()
         let basicPath = (fixtureDir as NSString).appendingPathComponent("basic.feature")
 
@@ -181,13 +173,11 @@ final class FeaturePathTests: XCTestCase {
 
         let result = try parser.parsePaths(paths)
 
-        // Should only parse the file once
-        XCTAssertEqual(result.features.count, 1)
-        // But merge line filters
-        XCTAssertEqual(result.lineFilters[basicPath], Set([6, 11]))
+        #expect(result.features.count == 1)
+        #expect(result.lineFilters[basicPath] == Set([6, 11]))
     }
 
-    func testParsePathsDirectory() throws {
+    @Test func parsePathsDirectory() throws {
         let fixtureDir = try fixturesDirectory()
 
         let parser = GherkinParser()
@@ -197,11 +187,11 @@ final class FeaturePathTests: XCTestCase {
 
         let result = try parser.parsePaths(paths)
 
-        XCTAssertGreaterThanOrEqual(result.features.count, 6)
-        XCTAssertTrue(result.lineFilters.isEmpty)
+        #expect(result.features.count >= 6)
+        #expect(result.lineFilters.isEmpty)
     }
 
-    func testParsePathsNoLineFiltersForFileWithoutLines() throws {
+    @Test func parsePathsNoLineFiltersForFileWithoutLines() throws {
         let fixtureDir = try fixturesDirectory()
         let basicPath = (fixtureDir as NSString).appendingPathComponent("basic.feature")
 
@@ -212,56 +202,48 @@ final class FeaturePathTests: XCTestCase {
 
         let result = try parser.parsePaths(paths)
 
-        XCTAssertEqual(result.features.count, 1)
-        XCTAssertTrue(result.lineFilters.isEmpty)
+        #expect(result.features.count == 1)
+        #expect(result.lineFilters.isEmpty)
     }
 
     // MARK: - Line Filtering Logic
 
-    func testLineFilterMatchesExactScenarioLine() throws {
-        // basic.feature: Scenario: Addition is at line 6
+    @Test func lineFilterMatchesExactScenarioLine() throws {
         let feature = try parseBasicFeature()
         let scenarios = expandedScenarios(from: feature)
 
-        // Line 6 is the exact "Scenario: Addition" line
         let matched = scenariosMatchingLines(scenarios, allowedLines: [6], feature: feature)
-        XCTAssertEqual(matched.count, 1)
-        XCTAssertEqual(matched[0].name, "Addition")
+        #expect(matched.count == 1)
+        #expect(matched[0].name == "Addition")
     }
 
-    func testLineFilterMatchesStepWithinScenario() throws {
-        // basic.feature: "When I add 3" is at line 8, within Scenario: Addition (line 6)
+    @Test func lineFilterMatchesStepWithinScenario() throws {
         let feature = try parseBasicFeature()
         let scenarios = expandedScenarios(from: feature)
 
         let matched = scenariosMatchingLines(scenarios, allowedLines: [8], feature: feature)
-        XCTAssertEqual(matched.count, 1)
-        XCTAssertEqual(matched[0].name, "Addition")
+        #expect(matched.count == 1)
+        #expect(matched[0].name == "Addition")
     }
 
-    func testLineFilterMatchesSecondScenario() throws {
-        // basic.feature: Scenario: Subtraction is at line 11
+    @Test func lineFilterMatchesSecondScenario() throws {
         let feature = try parseBasicFeature()
         let scenarios = expandedScenarios(from: feature)
 
         let matched = scenariosMatchingLines(scenarios, allowedLines: [11], feature: feature)
-        XCTAssertEqual(matched.count, 1)
-        XCTAssertEqual(matched[0].name, "Subtraction")
+        #expect(matched.count == 1)
+        #expect(matched[0].name == "Subtraction")
     }
 
-    func testLineFilterNoMatchForFeatureLine() throws {
-        // basic.feature: line 1 is "Feature: Basic arithmetic"
+    @Test func lineFilterNoMatchForFeatureLine() throws {
         let feature = try parseBasicFeature()
         let scenarios = expandedScenarios(from: feature)
 
-        // Line 1 is the Feature line — no scenario starts at or before it
-        // (first scenario is at line 6)
         let matched = scenariosMatchingLines(scenarios, allowedLines: [1], feature: feature)
-        XCTAssertTrue(matched.isEmpty)
+        #expect(matched.isEmpty)
     }
 
-    func testLineFilterNoMatchForBackgroundLine() throws {
-        // with_background.feature: Background is at line 2, scenarios at 6 and 10
+    @Test func lineFilterNoMatchForBackgroundLine() throws {
         let fixtureDir = try fixturesDirectory()
         let path = (fixtureDir as NSString).appendingPathComponent("with_background.feature")
         let parser = GherkinParser()
@@ -269,42 +251,39 @@ final class FeaturePathTests: XCTestCase {
         let expanded = OutlineExpander().expand(feature)
         let scenarios = expandedScenarios(from: expanded)
 
-        // Line 3 is within the Background block (before any scenario)
         let matched = scenariosMatchingLines(scenarios, allowedLines: [3], feature: expanded)
-        XCTAssertTrue(matched.isEmpty)
+        #expect(matched.isEmpty)
     }
 
-    func testLineFilterWithMultipleAllowedLines() throws {
-        // basic.feature: Addition at line 6, Subtraction at line 11
+    @Test func lineFilterWithMultipleAllowedLines() throws {
         let feature = try parseBasicFeature()
         let scenarios = expandedScenarios(from: feature)
 
         let matched = scenariosMatchingLines(scenarios, allowedLines: [6, 11], feature: feature)
-        XCTAssertEqual(matched.count, 2)
+        #expect(matched.count == 2)
         let names = Set(matched.map(\.name))
-        XCTAssertTrue(names.contains("Addition"))
-        XCTAssertTrue(names.contains("Subtraction"))
+        #expect(names.contains("Addition"))
+        #expect(names.contains("Subtraction"))
     }
 
-    func testLineFilterPastEndOfFile() throws {
-        // basic.feature has 15 lines; line 100 should match the last scenario
+    @Test func lineFilterPastEndOfFile() throws {
         let feature = try parseBasicFeature()
         let scenarios = expandedScenarios(from: feature)
 
         let matched = scenariosMatchingLines(scenarios, allowedLines: [100], feature: feature)
-        XCTAssertEqual(matched.count, 1)
-        XCTAssertEqual(matched[0].name, "Subtraction")
+        #expect(matched.count == 1)
+        #expect(matched[0].name == "Subtraction")
     }
 
     // MARK: - Equatable
 
-    func testFeaturePathEquatable() {
+    @Test func featurePathEquatable() {
         let a = FeaturePath(path: "/tmp/a.feature", lines: [10], isDirectory: false)
         let b = FeaturePath(path: "/tmp/a.feature", lines: [10], isDirectory: false)
         let c = FeaturePath(path: "/tmp/a.feature", lines: [20], isDirectory: false)
 
-        XCTAssertEqual(a, b)
-        XCTAssertNotEqual(a, c)
+        #expect(a == b)
+        #expect(a != c)
     }
 
     // MARK: - Helpers
@@ -329,8 +308,6 @@ final class FeaturePathTests: XCTestCase {
         }
     }
 
-    /// Replicates the line-matching algorithm from GherkinTestCase.
-    /// A scenario matches a line if the line falls within its definition range.
     private func scenariosMatchingLines(
         _ scenarios: [Scenario],
         allowedLines: Set<Int>,

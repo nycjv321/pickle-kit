@@ -1,5 +1,16 @@
-import XCTest
+import Testing
+import Foundation
 import PickleKit
+
+// MARK: - Assertion Error for Step Handlers
+
+/// Lightweight error type for step handler assertion failures.
+/// Since step handlers run inside `ScenarioRunner` (not directly in a Swift Testing context),
+/// XCTest assertions won't propagate. Instead, throw this error to signal failure.
+private struct StepAssertionError: Error, CustomStringConvertible {
+    let message: String
+    var description: String { message }
+}
 
 // MARK: - Domain Step Definition Types
 
@@ -22,7 +33,9 @@ struct ArithmeticSteps: StepDefinitions {
 
     let resultShouldBe = StepDefinition.then("the result should be (\\d+)") { match in
         let expected = Int(match.captures[0])!
-        XCTAssertEqual(Self.number, expected)
+        guard Self.number == expected else {
+            throw StepAssertionError(message: "Expected \(expected) but got \(Self.number)")
+        }
     }
 }
 
@@ -49,7 +62,9 @@ struct ShoppingCartSteps: StepDefinitions {
 
     let cartCount = StepDefinition.then("the cart should contain (\\d+) items?") { match in
         let expected = Int(match.captures[0])!
-        XCTAssertEqual(Self.cart.count, expected)
+        guard Self.cart.count == expected else {
+            throw StepAssertionError(message: "Expected cart count \(expected) but got \(Self.cart.count)")
+        }
     }
 }
 
@@ -81,7 +96,9 @@ struct FruitSteps: StepDefinitions {
 
     let shouldHaveFruits = StepDefinition.then("I should have (\\d+) fruits") { match in
         let expected = Int(match.captures[0])!
-        XCTAssertEqual(Self.fruits, expected)
+        guard Self.fruits == expected else {
+            throw StepAssertionError(message: "Expected \(expected) fruits but got \(Self.fruits)")
+        }
     }
 }
 
@@ -105,7 +122,9 @@ struct DataTableSteps: StepDefinitions {
 
     let findUsers = StepDefinition.then("I should find (\\d+) users?") { match in
         let expected = Int(match.captures[0])!
-        XCTAssertEqual(Self.searchResults, expected)
+        guard Self.searchResults == expected else {
+            throw StepAssertionError(message: "Expected \(expected) users but got \(Self.searchResults)")
+        }
     }
 }
 
@@ -128,7 +147,9 @@ struct DocStringSteps: StepDefinitions {
 
     let statusShouldBe = StepDefinition.then("the status should be \"([^\"]*)\"") { match in
         let expected = match.captures[0]
-        XCTAssertTrue(Self.apiResponse?.contains("\"\(expected)\"") == true)
+        guard Self.apiResponse?.contains("\"\(expected)\"") == true else {
+            throw StepAssertionError(message: "API response does not contain status \"\(expected)\"")
+        }
     }
 
     let documentWithContent = StepDefinition.given("I have a document with content:") { match in
@@ -138,30 +159,39 @@ struct DocStringSteps: StepDefinitions {
     let documentLineCount = StepDefinition.then("the document should have (\\d+) lines") { match in
         let expected = Int(match.captures[0])!
         let lineCount = Self.document?.components(separatedBy: "\n").count ?? 0
-        XCTAssertEqual(lineCount, expected)
+        guard lineCount == expected else {
+            throw StepAssertionError(message: "Expected \(expected) lines but got \(lineCount)")
+        }
     }
 }
 
-// MARK: - Integration Test Case
+// MARK: - Integration Test Suite
 
-/// Integration test that runs fixture .feature files through GherkinTestCase.
-/// This exercises the full pipeline: parsing -> outline expansion -> dynamic test
-/// generation -> step execution -> report collection.
+/// Integration test that runs fixture .feature files through GherkinTestScenario.
+/// This exercises the full pipeline: parsing -> outline expansion -> parameterized
+/// test generation -> step execution.
 ///
-/// Also enables HTML report generation via `PICKLE_REPORT=1 swift test`.
-final class GherkinIntegrationTests: GherkinTestCase {
+/// Uses `@Suite(.serialized)` because step definition types use `nonisolated(unsafe)
+/// static var` state that gets reset per-scenario via `init()` — parallel execution
+/// would cause data races.
+@Suite(.serialized)
+struct GherkinIntegrationTests {
 
-    override class var featureBundle: Bundle { Bundle.module }
-    override class var featureSubdirectory: String? { "Fixtures" }
+    static let allScenarios = GherkinTestScenario.scenarios(
+        bundle: Bundle.module,
+        subdirectory: "Fixtures"
+    )
 
-    override class var stepDefinitionTypes: [any StepDefinitions.Type] {
-        [
+    @Test(arguments: GherkinIntegrationTests.allScenarios)
+    func scenario(_ test: GherkinTestScenario) async throws {
+        let result = try await test.run(stepDefinitions: [
             ArithmeticSteps.self,
             ShoppingCartSteps.self,
             TaggedSteps.self,
             FruitSteps.self,
             DataTableSteps.self,
             DocStringSteps.self,
-        ]
+        ])
+        #expect(result.passed, "Scenario '\(test.scenario.name)' failed: \(result.error?.localizedDescription ?? "unknown error")")
     }
 }

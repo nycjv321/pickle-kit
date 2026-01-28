@@ -1,202 +1,186 @@
-import XCTest
+import Testing
+import Foundation
 @testable import PickleKit
 
-final class ParserTests: XCTestCase {
+@Suite
+struct ParserTests {
 
     let parser = GherkinParser()
 
     // MARK: - Basic Parsing
 
-    func testParseBasicFeature() throws {
+    @Test func parseBasicFeature() throws {
         let feature = try loadFixture("basic")
 
-        XCTAssertEqual(feature.name, "Basic arithmetic")
-        XCTAssertEqual(feature.scenarios.count, 2)
-        XCTAssertNil(feature.background)
+        #expect(feature.name == "Basic arithmetic")
+        #expect(feature.scenarios.count == 2)
+        #expect(feature.background == nil)
     }
 
-    func testParseFeatureDescription() throws {
+    @Test func parseFeatureDescription() throws {
         let feature = try loadFixture("basic")
 
-        XCTAssertTrue(feature.description.contains("As a user"))
-        XCTAssertTrue(feature.description.contains("I want to perform basic math"))
+        #expect(feature.description.contains("As a user"))
+        #expect(feature.description.contains("I want to perform basic math"))
     }
 
-    func testParseScenarioNames() throws {
+    @Test func parseScenarioNames() throws {
         let feature = try loadFixture("basic")
 
-        XCTAssertEqual(feature.scenarios[0].name, "Addition")
-        XCTAssertEqual(feature.scenarios[1].name, "Subtraction")
+        #expect(feature.scenarios[0].name == "Addition")
+        #expect(feature.scenarios[1].name == "Subtraction")
     }
 
-    func testParseSteps() throws {
+    @Test func parseSteps() throws {
         let feature = try loadFixture("basic")
 
-        guard case .scenario(let scenario) = feature.scenarios[0] else {
-            XCTFail("Expected scenario"); return
-        }
+        let scenario = try #require(feature.scenarios[0].asScenario)
 
-        XCTAssertEqual(scenario.steps.count, 3)
-        XCTAssertEqual(scenario.steps[0].keyword, .given)
-        XCTAssertEqual(scenario.steps[0].text, "I have the number 5")
-        XCTAssertEqual(scenario.steps[1].keyword, .when)
-        XCTAssertEqual(scenario.steps[1].text, "I add 3")
-        XCTAssertEqual(scenario.steps[2].keyword, .then)
-        XCTAssertEqual(scenario.steps[2].text, "the result should be 8")
+        #expect(scenario.steps.count == 3)
+        #expect(scenario.steps[0].keyword == .given)
+        #expect(scenario.steps[0].text == "I have the number 5")
+        #expect(scenario.steps[1].keyword == .when)
+        #expect(scenario.steps[1].text == "I add 3")
+        #expect(scenario.steps[2].keyword == .then)
+        #expect(scenario.steps[2].text == "the result should be 8")
     }
 
-    func testStepSourceLines() throws {
+    @Test func stepSourceLines() throws {
         let feature = try loadFixture("basic")
 
-        guard case .scenario(let scenario) = feature.scenarios[0] else {
-            XCTFail("Expected scenario"); return
-        }
+        let scenario = try #require(feature.scenarios[0].asScenario)
 
         // Lines should be > 0 (1-based)
         for step in scenario.steps {
-            XCTAssertGreaterThan(step.sourceLine, 0)
+            #expect(step.sourceLine > 0)
         }
     }
 
     // MARK: - Background
 
-    func testParseBackground() throws {
+    @Test func parseBackground() throws {
         let feature = try loadFixture("with_background")
 
-        XCTAssertNotNil(feature.background)
-        XCTAssertEqual(feature.background?.steps.count, 2)
-        XCTAssertEqual(feature.background?.steps[0].keyword, .given)
-        XCTAssertEqual(feature.background?.steps[0].text, "I have an empty cart")
-        XCTAssertEqual(feature.background?.steps[1].keyword, .and)
-        XCTAssertEqual(feature.background?.steps[1].text, "I am logged in as \"testuser\"")
+        #expect(feature.background != nil)
+        #expect(feature.background?.steps.count == 2)
+        #expect(feature.background?.steps[0].keyword == .given)
+        #expect(feature.background?.steps[0].text == "I have an empty cart")
+        #expect(feature.background?.steps[1].keyword == .and)
+        #expect(feature.background?.steps[1].text == "I am logged in as \"testuser\"")
     }
 
-    func testBackgroundWithMultipleScenarios() throws {
+    @Test func backgroundWithMultipleScenarios() throws {
         let feature = try loadFixture("with_background")
 
-        XCTAssertEqual(feature.scenarios.count, 2)
+        #expect(feature.scenarios.count == 2)
     }
 
     // MARK: - Scenario Outline
 
-    func testParseScenarioOutline() throws {
+    @Test func parseScenarioOutline() throws {
         let feature = try loadFixture("with_outline")
 
-        XCTAssertEqual(feature.scenarios.count, 1)
-        guard case .outline(let outline) = feature.scenarios[0] else {
-            XCTFail("Expected outline"); return
-        }
+        #expect(feature.scenarios.count == 1)
+        let outline = try #require(feature.scenarios[0].asOutline)
 
-        XCTAssertEqual(outline.name, "Eating fruits")
-        XCTAssertEqual(outline.steps.count, 3)
-        XCTAssertEqual(outline.examples.count, 2)
+        #expect(outline.name == "Eating fruits")
+        #expect(outline.steps.count == 3)
+        #expect(outline.examples.count == 2)
     }
 
-    func testOutlineExamplesTable() throws {
+    @Test func outlineExamplesTable() throws {
         let feature = try loadFixture("with_outline")
 
-        guard case .outline(let outline) = feature.scenarios[0] else {
-            XCTFail("Expected outline"); return
-        }
+        let outline = try #require(feature.scenarios[0].asOutline)
 
         let firstExamples = outline.examples[0]
-        XCTAssertEqual(firstExamples.table.headers, ["start", "eaten", "remaining"])
-        XCTAssertEqual(firstExamples.table.dataRows.count, 2)
-        XCTAssertEqual(firstExamples.table.dataRows[0], ["12", "5", "7"])
-        XCTAssertEqual(firstExamples.table.dataRows[1], ["20", "5", "15"])
+        #expect(firstExamples.table.headers == ["start", "eaten", "remaining"])
+        #expect(firstExamples.table.dataRows.count == 2)
+        #expect(firstExamples.table.dataRows[0] == ["12", "5", "7"])
+        #expect(firstExamples.table.dataRows[1] == ["20", "5", "15"])
     }
 
-    func testOutlineStepPlaceholders() throws {
+    @Test func outlineStepPlaceholders() throws {
         let feature = try loadFixture("with_outline")
 
-        guard case .outline(let outline) = feature.scenarios[0] else {
-            XCTFail("Expected outline"); return
-        }
+        let outline = try #require(feature.scenarios[0].asOutline)
 
-        XCTAssertEqual(outline.steps[0].text, "I have <start> fruits")
-        XCTAssertEqual(outline.steps[1].text, "I eat <eaten> fruits")
+        #expect(outline.steps[0].text == "I have <start> fruits")
+        #expect(outline.steps[1].text == "I eat <eaten> fruits")
     }
 
     // MARK: - Data Tables
 
-    func testParseDataTable() throws {
+    @Test func parseDataTable() throws {
         let feature = try loadFixture("with_tables")
 
-        guard case .scenario(let scenario) = feature.scenarios[0] else {
-            XCTFail("Expected scenario"); return
-        }
+        let scenario = try #require(feature.scenarios[0].asScenario)
 
         let step = scenario.steps[0]
-        XCTAssertNotNil(step.dataTable)
-        XCTAssertEqual(step.dataTable?.headers, ["name", "email", "role"])
-        XCTAssertEqual(step.dataTable?.dataRows.count, 3)
-        XCTAssertEqual(step.dataTable?.dataRows[0], ["Alice", "alice@example.com", "admin"])
+        #expect(step.dataTable != nil)
+        #expect(step.dataTable?.headers == ["name", "email", "role"])
+        #expect(step.dataTable?.dataRows.count == 3)
+        #expect(step.dataTable?.dataRows[0] == ["Alice", "alice@example.com", "admin"])
     }
 
-    func testDataTableAsDictionaries() throws {
+    @Test func dataTableAsDictionaries() throws {
         let feature = try loadFixture("with_tables")
 
-        guard case .scenario(let scenario) = feature.scenarios[0] else {
-            XCTFail("Expected scenario"); return
-        }
+        let scenario = try #require(feature.scenarios[0].asScenario)
 
         let dicts = scenario.steps[0].dataTable?.asDictionaries ?? []
-        XCTAssertEqual(dicts.count, 3)
-        XCTAssertEqual(dicts[0]["name"], "Alice")
-        XCTAssertEqual(dicts[0]["role"], "admin")
-        XCTAssertEqual(dicts[1]["email"], "bob@example.com")
+        #expect(dicts.count == 3)
+        #expect(dicts[0]["name"] == "Alice")
+        #expect(dicts[0]["role"] == "admin")
+        #expect(dicts[1]["email"] == "bob@example.com")
     }
 
     // MARK: - Doc Strings
 
-    func testParseDocString() throws {
+    @Test func parseDocString() throws {
         let feature = try loadFixture("with_docstrings")
 
-        guard case .scenario(let scenario) = feature.scenarios[0] else {
-            XCTFail("Expected scenario"); return
-        }
+        let scenario = try #require(feature.scenarios[0].asScenario)
 
         let step = scenario.steps[0]
-        XCTAssertNotNil(step.docString)
-        XCTAssertTrue(step.docString!.contains("\"status\": \"ok\""))
-        XCTAssertTrue(step.docString!.contains("\"count\": 42"))
+        #expect(step.docString != nil)
+        #expect(step.docString!.contains("\"status\": \"ok\""))
+        #expect(step.docString!.contains("\"count\": 42"))
     }
 
-    func testMultiLineDocString() throws {
+    @Test func multiLineDocString() throws {
         let feature = try loadFixture("with_docstrings")
 
-        guard case .scenario(let scenario) = feature.scenarios[1] else {
-            XCTFail("Expected scenario"); return
-        }
+        let scenario = try #require(feature.scenarios[1].asScenario)
 
         let step = scenario.steps[0]
-        XCTAssertNotNil(step.docString)
+        #expect(step.docString != nil)
         let lines = step.docString!.components(separatedBy: "\n")
-        XCTAssertEqual(lines.count, 3)
-        XCTAssertEqual(lines[0], "First line")
-        XCTAssertEqual(lines[1], "Second line")
-        XCTAssertEqual(lines[2], "Third line")
+        #expect(lines.count == 3)
+        #expect(lines[0] == "First line")
+        #expect(lines[1] == "Second line")
+        #expect(lines[2] == "Third line")
     }
 
     // MARK: - Tags
 
-    func testFeatureTags() throws {
+    @Test func featureTags() throws {
         let feature = try loadFixture("with_tags")
 
-        XCTAssertEqual(feature.tags, ["smoke"])
+        #expect(feature.tags == ["smoke"])
     }
 
-    func testScenarioTags() throws {
+    @Test func scenarioTags() throws {
         let feature = try loadFixture("with_tags")
 
-        XCTAssertEqual(feature.scenarios[0].tags, ["fast"])
-        XCTAssertEqual(feature.scenarios[1].tags, ["slow", "integration"])
-        XCTAssertEqual(feature.scenarios[2].tags, ["wip"])
+        #expect(feature.scenarios[0].tags == ["fast"])
+        #expect(feature.scenarios[1].tags == ["slow", "integration"])
+        #expect(feature.scenarios[2].tags == ["wip"])
     }
 
     // MARK: - Comments
 
-    func testCommentsIgnored() throws {
+    @Test func commentsIgnored() throws {
         let source = """
         # This is a comment
         Feature: With comments
@@ -208,38 +192,31 @@ final class ParserTests: XCTestCase {
         """
 
         let feature = try parser.parse(source: source)
-        XCTAssertEqual(feature.name, "With comments")
-        guard case .scenario(let scenario) = feature.scenarios[0] else {
-            XCTFail("Expected scenario"); return
-        }
-        XCTAssertEqual(scenario.steps.count, 2)
+        #expect(feature.name == "With comments")
+        let scenario = try #require(feature.scenarios[0].asScenario)
+        #expect(scenario.steps.count == 2)
     }
 
     // MARK: - Error Cases
 
-    func testNoFeatureThrows() {
+    @Test func noFeatureThrows() {
         let source = """
         Scenario: Orphan
           Given something
         """
 
-        XCTAssertThrowsError(try parser.parse(source: source)) { error in
-            XCTAssertTrue(error is GherkinParserError)
+        #expect(throws: GherkinParserError.self) {
+            try parser.parse(source: source)
         }
     }
 
-    func testEmptySourceThrows() {
-        XCTAssertThrowsError(try parser.parse(source: "")) { error in
-            guard let parserError = error as? GherkinParserError else {
-                XCTFail("Expected GherkinParserError"); return
-            }
-            if case .noFeatureFound = parserError {} else {
-                XCTFail("Expected noFeatureFound error")
-            }
+    @Test func emptySourceThrows() {
+        #expect(throws: GherkinParserError.self) {
+            try parser.parse(source: "")
         }
     }
 
-    func testUnterminatedDocStringThrows() {
+    @Test func unterminatedDocStringThrows() {
         let source = """
         Feature: Bad
           Scenario: Unterminated
@@ -248,37 +225,32 @@ final class ParserTests: XCTestCase {
               some content
         """
 
-        XCTAssertThrowsError(try parser.parse(source: source)) { error in
-            guard let parserError = error as? GherkinParserError else {
-                XCTFail("Expected GherkinParserError"); return
-            }
-            if case .unterminatedDocString = parserError {} else {
-                XCTFail("Expected unterminatedDocString error")
-            }
+        #expect(throws: GherkinParserError.self) {
+            try parser.parse(source: source)
         }
     }
 
     // MARK: - Source File
 
-    func testSourceFilePreserved() throws {
+    @Test func sourceFilePreserved() throws {
         let feature = try parser.parse(source: "Feature: Test", fileName: "test.feature")
-        XCTAssertEqual(feature.sourceFile, "test.feature")
+        #expect(feature.sourceFile == "test.feature")
     }
 
     // MARK: - Bundle Parsing
 
-    func testParseBundleFixtures() throws {
+    @Test func parseBundleFixtures() throws {
         let features = try parser.parseBundle(
             bundle: Bundle.module,
             subdirectory: "Fixtures"
         )
 
-        XCTAssertEqual(features.count, 6)
+        #expect(features.count == 6)
     }
 
     // MARK: - And/But Keywords
 
-    func testAndButKeywords() throws {
+    @Test func andButKeywords() throws {
         let source = """
         Feature: Keywords
           Scenario: All keywords
@@ -291,14 +263,12 @@ final class ParserTests: XCTestCase {
         """
 
         let feature = try parser.parse(source: source)
-        guard case .scenario(let scenario) = feature.scenarios[0] else {
-            XCTFail("Expected scenario"); return
-        }
+        let scenario = try #require(feature.scenarios[0].asScenario)
 
-        XCTAssertEqual(scenario.steps.count, 6)
-        XCTAssertEqual(scenario.steps[1].keyword, .and)
-        XCTAssertEqual(scenario.steps[3].keyword, .but)
-        XCTAssertEqual(scenario.steps[5].keyword, .and)
+        #expect(scenario.steps.count == 6)
+        #expect(scenario.steps[1].keyword == .and)
+        #expect(scenario.steps[3].keyword == .but)
+        #expect(scenario.steps[5].keyword == .and)
     }
 
     // MARK: - Helpers
