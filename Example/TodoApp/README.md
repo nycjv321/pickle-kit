@@ -354,6 +354,8 @@ Use `.given()`, `.when()`, `.then()` for keyword-specific steps, or `.step()` fo
 
 PickleKit can generate Cucumber-style HTML reports with step-level results and timing.
 
+![HTML test report generated from TodoApp UI tests](../../docs/todo-test-run.png)
+
 ### Report configuration by context
 
 | Context | How to enable | Report path |
@@ -419,6 +421,7 @@ The report is a self-contained HTML file with:
 - Interactive expand/collapse and status filtering
 
 Failed scenarios are expanded by default.
+
 
 ## Key Design Patterns
 

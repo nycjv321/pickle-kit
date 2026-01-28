@@ -171,6 +171,10 @@ PICKLE_REPORT=1 swift test
 
 The report includes summary counts, per-feature sections with collapsible scenarios, per-step timing and error details, and interactive filtering controls.
 
+![HTML test report showing a completed test run](docs/todo-test-run.png)
+
+![HTML test report with filtered scenarios](docs/example-filtered-scenarios.png)
+
 See [Report Configuration](docs/REPORTING.md) for customization, xcodebuild integration, and programmatic generation.
 
 ## Architecture
@@ -225,7 +229,11 @@ See [AI-Assisted Development](docs/AI-DEVELOPMENT.md) for the workflow, lessons 
 
 ## Example: TodoApp with XCUITest
 
-The [`Example/TodoApp`](Example/TodoApp) directory contains a complete macOS SwiftUI todo app that demonstrates PickleKit with XCUITest. It includes:
+The [`Example/TodoApp`](Example/TodoApp) directory contains a complete macOS SwiftUI todo app that demonstrates PickleKit with XCUITest.
+
+![Xcode test navigator showing XCUITest results for the TodoApp](docs/todo-test-run.png)
+
+It includes:
 
 - **3 targets**: TodoApp (application), TodoAppTests (unit tests for `TodoStore`), TodoAppUITests (Gherkin UI tests)
 - **3 feature files** covering CRUD, completion toggling, data tables, scenario outlines, and tag filtering
