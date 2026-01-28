@@ -124,6 +124,28 @@ xcodebuild test \
 
 In Xcode, click the diamond icon next to any individual test in the test navigator to run just that one.
 
+### Run scenarios by name
+
+Use the `CUCUMBER_SCENARIOS` environment variable to run specific scenarios by name (comma-separated, case-insensitive):
+
+```bash
+# Run a single scenario
+TEST_RUNNER_CUCUMBER_SCENARIOS="Add a single todo" \
+  xcodebuild test \
+  -project TodoApp.xcodeproj \
+  -scheme TodoApp \
+  -destination 'platform=macOS' \
+  -only-testing:TodoAppUITests 2>&1 | xcbeautify
+
+# Run multiple scenarios
+TEST_RUNNER_CUCUMBER_SCENARIOS="Add a single todo,Delete a todo,Empty state message" \
+  xcodebuild test \
+  -project TodoApp.xcodeproj \
+  -scheme TodoApp \
+  -destination 'platform=macOS' \
+  -only-testing:TodoAppUITests 2>&1 | xcbeautify
+```
+
 ### Run scenarios by tag
 
 Use the `CUCUMBER_TAGS` environment variable to include only scenarios matching specific tags:

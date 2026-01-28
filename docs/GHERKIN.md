@@ -190,7 +190,7 @@ Tags from the feature level and scenario level are combined.
 
 ## Filtering Scenarios
 
-There are three ways to filter which scenarios run:
+There are four ways to filter which scenarios run:
 
 ### 1. Name-based filtering with `swift test --filter`
 
@@ -226,6 +226,40 @@ CUCUMBER_TAGS=smoke CUCUMBER_EXCLUDE_TAGS=wip swift test
 ```
 
 Environment variable tags are **merged** with any compile-time `tagFilter` override. Both include and exclude sets are unioned.
+
+### 4. CLI scenario name filtering with environment variable
+
+Filter scenarios by name at runtime without changing code:
+
+| Variable | Purpose | Format |
+|----------|---------|--------|
+| `CUCUMBER_SCENARIOS` | Include only scenarios with these names | Comma-separated, case-insensitive |
+
+```bash
+# Run a single scenario by name
+CUCUMBER_SCENARIOS="Add a single todo" swift test
+
+# Run multiple scenarios
+CUCUMBER_SCENARIOS="Add a single todo,Delete a todo" swift test
+```
+
+With xcodebuild, prefix with `TEST_RUNNER_`:
+
+```bash
+TEST_RUNNER_CUCUMBER_SCENARIOS="Add a single todo" \
+  xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp \
+  -destination 'platform=macOS' -only-testing:TodoAppUITests
+```
+
+You can also set `scenarioNameFilter` at compile time:
+
+```swift
+override class var scenarioNameFilter: ScenarioNameFilter? {
+    ScenarioNameFilter(names: ["Add a single todo"])
+}
+```
+
+Environment variable names are **merged** with any compile-time `scenarioNameFilter` override. Both name sets are unioned.
 
 ## Programmatic Usage
 
