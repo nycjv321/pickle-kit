@@ -308,6 +308,22 @@ open class GherkinTestCase: XCTestCase {
         }
 
         let (scenario, background, feature) = entry
+
+        // Runtime scenario name filter — catches CUCUMBER_SCENARIOS env var
+        // that may not be available during defaultTestSuite construction
+        // (e.g., xcodebuild's TEST_RUNNER_ prefix forwarding).
+        if let envNameFilter = ScenarioNameFilter.fromEnvironment() {
+            let mergedFilter: ScenarioNameFilter
+            if let compileTimeFilter = type(of: self).scenarioNameFilter {
+                mergedFilter = compileTimeFilter.merging(envNameFilter)
+            } else {
+                mergedFilter = envNameFilter
+            }
+            if !mergedFilter.shouldInclude(name: scenario.name) {
+                return
+            }
+        }
+
         let reportingEnabled = type(of: self).reportEnabled
 
         if reportingEnabled {
