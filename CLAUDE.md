@@ -67,6 +67,8 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 | `HTMLReportGenerator.swift` | Self-contained HTML report generator with inline CSS/JS |
 | `ReportResultCollector.swift` | Thread-safe result accumulator using OSAllocatedUnfairLock |
 | `GherkinIntegrationTests.swift` | Swift Testing suite using `GherkinTestScenario` to run all fixture features |
+| `GherkinTestScenarioTests.swift` | Swift Testing bridge tests: loading, tag filtering, execution, properties |
+| `GherkinTestCaseTests.swift` | XCTest bridge tests: dynamic suite generation, tag filtering, subclass isolation, registry |
 
 ## Testing
 
@@ -82,6 +84,8 @@ swift test --filter StepResultTests            # Step result/timing tests
 swift test --filter HTMLReportGeneratorTests    # Report generation tests
 swift test --filter StepDefinitionsTests        # Step definitions struct/protocol/filter tests
 swift test --filter GherkinIntegrationTests    # Full pipeline integration tests
+swift test --filter GherkinTestScenarioTests   # Swift Testing bridge tests
+swift test --filter GherkinTestCaseTests        # XCTest bridge tests
 PICKLE_REPORT=1 swift test                     # Run tests + generate HTML report
 
 # TodoApp tests (from Example/TodoApp/, requires xcodegen generate first)
@@ -93,16 +97,18 @@ xcodebuild test -project TodoApp.xcodeproj -scheme TodoApp -destination 'platfor
 
 ```
 Tests/PickleKitTests/
-├── ParserTests.swift              # Gherkin parsing: features, scenarios, steps, tables, doc strings, tags, errors
-├── OutlineExpanderTests.swift     # Outline expansion: substitution, naming, tag combination, edge cases
-├── StepRegistryTests.swift        # Pattern matching: regex captures, ambiguity, anchoring, data passthrough
-├── ScenarioRunnerTests.swift      # Execution: passing/failing scenarios, backgrounds, tag filtering, captures
-├── TagFilterTests.swift           # Include/exclude logic, priority, edge cases
-├── StepResultTests.swift          # Step-level results: status, timing, tags, undefined/skipped, backward compat
-├── StepDefinitionsTests.swift     # StepDefinition struct, StepDefinitions protocol, Mirror discovery, filter
-├── HTMLReportGeneratorTests.swift # HTML generation: structure, counts, CSS classes, escaping, collector, aggregations
-├── GherkinIntegrationTests.swift  # Full pipeline: domain step types + GherkinTestScenario
-└── Fixtures/                      # .feature files loaded via Bundle.module
+├── ParserTests.swift                  # Gherkin parsing: features, scenarios, steps, tables, doc strings, tags, errors
+├── OutlineExpanderTests.swift         # Outline expansion: substitution, naming, tag combination, edge cases
+├── StepRegistryTests.swift            # Pattern matching: regex captures, ambiguity, anchoring, data passthrough
+├── ScenarioRunnerTests.swift          # Execution: passing/failing scenarios, backgrounds, tag filtering, captures
+├── TagFilterTests.swift               # Include/exclude logic, priority, edge cases
+├── StepResultTests.swift              # Step-level results: status, timing, tags, undefined/skipped, backward compat
+├── StepDefinitionsTests.swift         # StepDefinition struct, StepDefinitions protocol, Mirror discovery, filter
+├── HTMLReportGeneratorTests.swift     # HTML generation: structure, counts, CSS classes, escaping, collector, aggregations
+├── GherkinIntegrationTests.swift      # Full pipeline: domain step types + GherkinTestScenario
+├── GherkinTestScenarioTests.swift     # Swift Testing bridge: loading, filtering, execution, properties
+├── GherkinTestCaseTests.swift         # XCTest bridge: dynamic suites, tag filtering, isolation, registry
+└── Fixtures/                          # .feature files loaded via Bundle.module
     ├── basic.feature
     ├── with_background.feature
     ├── with_outline.feature
@@ -115,7 +121,7 @@ Fixtures are copied into the test bundle via `resources: [.copy("Fixtures")]` in
 
 ### Test Patterns
 
-All library tests use Swift Testing (`import Testing`). Tests use `@Suite struct`, `@Test func`, `#expect()`, and `try #require()`.
+All library tests use Swift Testing (`import Testing`). Tests use `@Suite struct`, `@Test func`, `#expect()`, and `try #require()`. `GherkinTestCaseTests` additionally imports `XCTest` for type access and defines `GherkinTestCase` helper subclasses that are auto-discovered by XCTest at runtime (wrapped in `#if canImport(XCTest) && canImport(ObjectiveC)`).
 
 ```swift
 // Parser tests load fixtures
@@ -145,6 +151,36 @@ registry.given("I do something") { _ in box.value = true }
 #expect(box.value)
 
 // Tests that modify environment variables use @Suite(.serialized) + defer cleanup
+
+// Bridge tests: GherkinTestScenario (Swift Testing bridge)
+// Count-sensitive tests parse features directly to bypass TagFilter.fromEnvironment(),
+// which races with TagFilterTests setting CUCUMBER_TAGS concurrently.
+let parser = GherkinParser()
+let features = try parser.parseBundle(bundle: Bundle.module, subdirectory: "Fixtures")
+let expander = OutlineExpander()
+var scenarios: [GherkinTestScenario] = []
+for feature in features {
+    let expanded = expander.expand(feature)
+    for definition in expanded.scenarios {
+        guard case .scenario(let scenario) = definition else { continue }
+        scenarios.append(GherkinTestScenario(scenario: scenario, background: expanded.background, feature: feature))
+    }
+}
+#expect(scenarios.count == 13)
+let result = try await scenarios[0].run(stepDefinitions: [ArithmeticSteps.self])
+#expect(result.passed)
+
+// Bridge tests: GherkinTestCase (XCTest bridge) via helper subclasses
+// Helper subclasses defined at file scope are auto-discovered by XCTest,
+// providing implicit integration testing for the XCTest bridge pipeline.
+// Count assertions use direct parsing (not defaultTestSuite) to avoid
+// the same env var race condition.
+final class BasicBridgeTestCase: GherkinTestCase {
+    override class var featurePaths: [String]? { fixturePath("basic").map { [$0] } }
+    override class var stepDefinitionTypes: [any StepDefinitions.Type] { [ArithmeticSteps.self] }
+}
+#expect(BasicBridgeTestCase.stepDefinitionTypes.count == 1)
+#expect(BasicBridgeTestCase.featurePaths?.count == 1)
 ```
 
 ## Common Tasks

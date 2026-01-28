@@ -42,7 +42,7 @@ The trophy has four layers, with integration tests forming the widest band:
        ╭──┴──┴──╮
        │         │
     ╭──┤Integr-  ├──╮
-    │  │  ation  │  │         ← Most investment: full pipeline (GherkinIntegrationTests)
+    │  │  ation  │  │         ← Most investment: full pipeline (GherkinIntegrationTests + bridge tests)
     │  │         │  │
     ╰──┴─────────┴──╯
        ╭─────────╮
@@ -60,13 +60,15 @@ PickleKit covers the **E2E / acceptance** layer of the trophy — human-readable
 Valuable for pure logic and isolated components, but not the primary confidence driver. Use them where the input/output boundary is clear and no integration wiring is needed.
 
 - **Framework tests**: `ParserTests`, `StepRegistryTests`, `ScenarioRunnerTests`, `TagFilterTests`, `StepResultTests`, `StepDefinitionsTests`, `HTMLReportGeneratorTests`
+- **Bridge tests**: `GherkinTestScenarioTests` (Swift Testing bridge: loading, tag filtering, execution, properties), `GherkinTestCaseTests` (XCTest bridge: dynamic suite generation, tag filtering, subclass isolation, registry)
 - **App tests**: `TodoStoreTests` — verifies add, remove, update, clear, toggle completion without any UI
 
 ### Integration Tests
 
 The sweet spot for confidence. These exercise real components working together and catch the class of bugs that unit tests miss: wiring errors, contract mismatches, and incorrect assumptions between layers.
 
-- `GherkinIntegrationTests` — a `GherkinTestCase` subclass that runs all fixture `.feature` files through the full parse → expand → register → run pipeline. Uses `stepDefinitionTypes` with 6 domain-specific `StepDefinitions` types (one per fixture feature file)
+- `GherkinIntegrationTests` — a Swift Testing suite that runs all fixture `.feature` files through the full parse → expand → register → run pipeline via `GherkinTestScenario`. Uses `@Test(arguments:)` with 6 domain-specific `StepDefinitions` types (one per fixture feature file), executing all 13 expanded scenarios and asserting `result.passed`
+- `GherkinTestCaseTests` helper subclasses — 8 `GherkinTestCase` subclasses (`*BridgeTestCase`) that are auto-discovered by XCTest at runtime, providing implicit integration testing for the XCTest bridge pipeline. `AllFixturesBridgeTestCase` exercises the same full pipeline (parse → expand → dynamic method generation → step registration → execution) for all 13 scenarios
 - Most testing effort should go here. When in doubt about where to add a test, prefer an integration test over a unit test
 
 ### UI / Acceptance Tests (E2E)
