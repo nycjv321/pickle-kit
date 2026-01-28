@@ -237,6 +237,102 @@ struct GherkinTestCaseTests {
         #expect(EmptySubdirBridgeTestCase.featureSubdirectory == "NonexistentSubdir")
     }
 
+    // MARK: - XCTAssert Failure Detection
+
+    @Test func xcTestAssertionErrorHasCorrectDescription() {
+        let error = XCTestAssertionError(message: "XCTest recorded 2 assertion failure(s) during scenario execution")
+        #expect(error.message == "XCTest recorded 2 assertion failure(s) during scenario execution")
+        #expect(error.errorDescription == error.message)
+        #expect(error.localizedDescription == error.message)
+    }
+
+    @Test func correctedScenarioResultPreservesFields() {
+        // Simulates what GherkinTestCase.executeScenario() does when
+        // XCTAssert failures are detected but the runner reported passing.
+        let stepResults = [
+            StepResult(keyword: "Given", text: "a setup step", status: .passed, duration: 0.01, sourceLine: 2),
+            StepResult(keyword: "Then", text: "an assertion step", status: .passed, duration: 0.02, sourceLine: 3),
+        ]
+
+        let originalResult = ScenarioResult(
+            scenarioName: "My scenario",
+            passed: true,
+            stepsExecuted: 2,
+            tags: ["smoke"],
+            stepResults: stepResults,
+            duration: 0.03
+        )
+
+        // Simulate the correction applied in executeScenario()
+        let correctedResult = ScenarioResult(
+            scenarioName: originalResult.scenarioName,
+            passed: false,
+            error: ScenarioRunnerError.stepFailed(
+                step: Step(keyword: .then, text: "an assertion step", sourceLine: 3),
+                feature: "Test Feature",
+                scenario: "My scenario",
+                underlyingError: XCTestAssertionError(
+                    message: "XCTest recorded 1 assertion failure(s) during scenario execution"
+                )
+            ),
+            stepsExecuted: originalResult.stepsExecuted,
+            tags: originalResult.tags,
+            stepResults: originalResult.stepResults,
+            duration: originalResult.duration
+        )
+
+        #expect(!correctedResult.passed)
+        #expect(correctedResult.scenarioName == "My scenario")
+        #expect(correctedResult.stepsExecuted == 2)
+        #expect(correctedResult.tags == ["smoke"])
+        #expect(correctedResult.stepResults.count == 2)
+        #expect(correctedResult.duration == 0.03)
+        #expect(correctedResult.error != nil)
+
+        // Verify the error is a ScenarioRunnerError.stepFailed
+        if let runnerError = correctedResult.error as? ScenarioRunnerError,
+           case .stepFailed(_, _, _, let underlying) = runnerError {
+            #expect(underlying is XCTestAssertionError)
+            #expect(underlying.localizedDescription.contains("assertion failure"))
+        } else {
+            Issue.record("Expected ScenarioRunnerError.stepFailed")
+        }
+    }
+
+    @Test func correctedResultRecordedInCollectorShowsAsFailed() {
+        // Verify a corrected result flows through ReportResultCollector correctly
+        let correctedResult = ScenarioResult(
+            scenarioName: "XCTAssert failure scenario",
+            passed: false,
+            error: XCTestAssertionError(message: "XCTest recorded 1 assertion failure(s)"),
+            stepsExecuted: 1,
+            tags: [],
+            stepResults: [
+                StepResult(keyword: "Then", text: "a failing assertion", status: .passed, sourceLine: 2)
+            ],
+            duration: 0.01
+        )
+
+        let collector = ReportResultCollector()
+        collector.record(
+            scenarioResult: correctedResult,
+            featureName: "XCTest Feature",
+            featureTags: [],
+            sourceFile: "xctest.feature"
+        )
+
+        let testRun = collector.buildTestRunResult()
+        #expect(testRun.totalScenarioCount == 1)
+        #expect(testRun.failedScenarioCount == 1)
+        #expect(testRun.passedScenarioCount == 0)
+
+        // The HTML report should show this as failed
+        let generator = HTMLReportGenerator()
+        let html = generator.generate(from: testRun)
+        #expect(html.contains("XCTAssert failure scenario"))
+        #expect(html.contains("data-status=\"failed\""))
+    }
+
     // MARK: - Registry
 
     @Test func registryIsInstanceBased() {

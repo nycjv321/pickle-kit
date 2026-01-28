@@ -1,15 +1,17 @@
-import Testing
 import Foundation
 import PickleKit
+import Testing
 
 // MARK: - Assertion Error for Step Handlers
 
 /// Lightweight error type for step handler assertion failures.
 /// Since step handlers run inside `ScenarioRunner` (not directly in a Swift Testing context),
 /// XCTest assertions won't propagate. Instead, throw this error to signal failure.
-private struct StepAssertionError: Error, CustomStringConvertible {
+/// Conforms to `LocalizedError` so `localizedDescription` returns the human-readable
+/// message (not the default Cocoa error format).
+private struct StepAssertionError: Error, LocalizedError {
     let message: String
-    var description: String { message }
+    var errorDescription: String? { message }
 }
 
 // MARK: - Domain Step Definition Types
@@ -63,7 +65,8 @@ struct ShoppingCartSteps: StepDefinitions {
     let cartCount = StepDefinition.then("the cart should contain (\\d+) items?") { match in
         let expected = Int(match.captures[0])!
         guard Self.cart.count == expected else {
-            throw StepAssertionError(message: "Expected cart count \(expected) but got \(Self.cart.count)")
+            throw StepAssertionError(
+                message: "Expected cart count \(expected) but got \(Self.cart.count)")
         }
     }
 }
@@ -123,7 +126,8 @@ struct DataTableSteps: StepDefinitions {
     let findUsers = StepDefinition.then("I should find (\\d+) users?") { match in
         let expected = Int(match.captures[0])!
         guard Self.searchResults == expected else {
-            throw StepAssertionError(message: "Expected \(expected) users but got \(Self.searchResults)")
+            throw StepAssertionError(
+                message: "Expected \(expected) users but got \(Self.searchResults)")
         }
     }
 }
@@ -148,7 +152,8 @@ struct DocStringSteps: StepDefinitions {
     let statusShouldBe = StepDefinition.then("the status should be \"([^\"]*)\"") { match in
         let expected = match.captures[0]
         guard Self.apiResponse?.contains("\"\(expected)\"") == true else {
-            throw StepAssertionError(message: "API response does not contain status \"\(expected)\"")
+            throw StepAssertionError(
+                message: "API response does not contain status \"\(expected)\"")
         }
     }
 
@@ -192,6 +197,9 @@ struct GherkinIntegrationTests {
             DataTableSteps.self,
             DocStringSteps.self,
         ])
-        #expect(result.passed, "Scenario '\(test.scenario.name)' failed: \(result.error?.localizedDescription ?? "unknown error")")
+        #expect(
+            result.passed,
+            "Scenario '\(test.scenario.name)' failed: \(result.error?.localizedDescription ?? "unknown error")"
+        )
     }
 }

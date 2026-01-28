@@ -45,6 +45,7 @@ Sources/PickleKit/
 - **Conditional compilation** — `GherkinTestCase` is wrapped in `#if canImport(XCTest) && canImport(ObjectiveC)`
 - **Reflection-based step registration** — `StepDefinitions` protocol uses `Mirror` to auto-discover stored `StepDefinition` properties. `GherkinTestCase.stepDefinitionTypes` enables declaring step providers per subclass. Type-based providers are registered before `registerStepDefinitions()`, so both approaches coexist.
 - **Two test bridges** — `GherkinTestScenario` for Swift Testing (`@Test(arguments:)`), `GherkinTestCase` for XCTest (UI tests, legacy). Both use the same `StepDefinitions` types. `ScenarioDefinition` has `asScenario`/`asOutline` convenience accessors for cleaner pattern matching in tests.
+- **XCTAssert failure detection** — `GherkinTestCase.executeScenario()` snapshots `testRun.totalFailureCount` before running each scenario. If `ScenarioRunner` reports the scenario as passing but XCTest recorded new assertion failures (from `XCTAssert*` calls in step handlers), the result is corrected to `passed: false` before recording to the `ReportResultCollector`. This bridges the gap where XCTAssert failures don't throw and are invisible to `ScenarioRunner`. The `XCTestAssertionError` type wraps the failure count for error reporting.
 
 ### Platforms
 
@@ -63,14 +64,15 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 | `TagFilter.swift` | Include/exclude filtering on tag arrays |
 | `ScenarioNameFilter.swift` | Filter scenarios by name via `CUCUMBER_SCENARIOS` env var |
 | `GherkinTestScenario.swift` | Swift Testing bridge: `@Test(arguments:)` parameterized scenarios, auto-report via `PICKLE_REPORT` |
-| `GherkinTestCase.swift` | XCTestCase subclass, dynamic test suite via ObjC runtime, report integration |
+| `GherkinTestCase.swift` | XCTestCase subclass, dynamic test suite via ObjC runtime, report integration, XCTAssert failure detection |
 | `StepResult.swift` | StepStatus enum, StepResult per-step execution data |
 | `TestRunResult.swift` | Aggregated test run result with feature/scenario/step counts |
 | `HTMLReportGenerator.swift` | Self-contained HTML report generator with inline CSS/JS |
 | `ReportResultCollector.swift` | Thread-safe result accumulator using OSAllocatedUnfairLock |
 | `GherkinIntegrationTests.swift` | Swift Testing suite using `GherkinTestScenario` to run all fixture features |
-| `GherkinTestScenarioTests.swift` | Swift Testing bridge tests: loading, tag filtering, execution, properties |
-| `GherkinTestCaseTests.swift` | XCTest bridge tests: dynamic suite generation, tag filtering, subclass isolation, registry |
+| `GherkinTestScenarioTests.swift` | Swift Testing bridge tests: loading, filtering, execution, properties, error reporting |
+| `GherkinTestCaseTests.swift` | XCTest bridge tests: dynamic suites, tag filtering, isolation, registry, XCTAssert failure detection |
+| `ReportIntegrationTests.swift` | End-to-end reporting: runner → collector → HTML, tag filtering in reports |
 
 ## Testing
 
@@ -89,6 +91,7 @@ swift test --filter ScenarioNameFilterTests     # Scenario name filter tests
 swift test --filter GherkinIntegrationTests    # Full pipeline integration tests
 swift test --filter GherkinTestScenarioTests   # Swift Testing bridge tests
 swift test --filter GherkinTestCaseTests        # XCTest bridge tests
+swift test --filter ReportIntegrationTests      # End-to-end reporting tests
 PICKLE_REPORT=1 swift test                     # Run tests + generate HTML report
 
 # TodoApp tests (from Example/TodoApp/, requires xcodegen generate first)
@@ -110,8 +113,9 @@ Tests/PickleKitTests/
 ├── StepDefinitionsTests.swift         # StepDefinition struct, StepDefinitions protocol, Mirror discovery, filter
 ├── HTMLReportGeneratorTests.swift     # HTML generation: structure, counts, CSS classes, escaping, collector, aggregations
 ├── GherkinIntegrationTests.swift      # Full pipeline: domain step types + GherkinTestScenario
-├── GherkinTestScenarioTests.swift     # Swift Testing bridge: loading, filtering, execution, properties, auto-report
-├── GherkinTestCaseTests.swift         # XCTest bridge: dynamic suites, tag filtering, isolation, registry
+├── GherkinTestScenarioTests.swift     # Swift Testing bridge: loading, filtering, execution, properties, auto-report, error reporting
+├── GherkinTestCaseTests.swift         # XCTest bridge: dynamic suites, tag filtering, isolation, registry, XCTAssert failure detection
+├── ReportIntegrationTests.swift       # End-to-end: runner → collector → HTML, tag filtering, error/undefined/mixed scenarios
 └── Fixtures/                          # .feature files loaded via Bundle.module
     ├── basic.feature
     ├── with_background.feature
@@ -216,7 +220,8 @@ final class BasicBridgeTestCase: GherkinTestCase {
 2. Declare steps as stored `let` properties using `StepDefinition.given/when/then/step`
 3. Own static state in `nonisolated(unsafe) static var` properties, reset in `init()`
 4. Add the type to `stepDefinitions` in `GherkinTestScenario.run()` (Swift Testing) or `stepDefinitionTypes` in a `GherkinTestCase` subclass (XCTest)
-5. Test with `StepDefinitionsTests` patterns
+5. Error types thrown from step handlers should conform to `LocalizedError` (not just `CustomStringConvertible`), so `localizedDescription` returns the human-readable message in CLI output and HTML reports
+6. Test with `StepDefinitionsTests` patterns
 
 ### Modifying step matching behavior
 
@@ -316,9 +321,9 @@ PickleKit generates Cucumber-style HTML reports with step-level results, timing,
 
 ### How It Works
 
-1. `ScenarioRunner.run()` captures per-step timing and builds `[StepResult]` arrays — each step gets `.passed`, `.failed`, `.undefined`, or `.skipped` status
+1. `ScenarioRunner.run()` captures per-step timing and builds `[StepResult]` arrays — each step gets `.passed`, `.failed`, `.undefined`, or `.skipped` status. Error messages include the scenario name for traceability.
 2. Both bridges auto-collect results when `PICKLE_REPORT` is set:
-   - **XCTest bridge:** `GherkinTestCase.executeScenario()` records each `ScenarioResult` into a shared `ReportResultCollector`
+   - **XCTest bridge:** `GherkinTestCase.executeScenario()` records each `ScenarioResult` into a shared `ReportResultCollector`. It also detects XCTAssert failures that didn't throw (see Key Design Decisions) and corrects the result to `passed: false` before recording.
    - **Swift Testing bridge:** `GherkinTestScenario.run()` auto-collects into its own shared `resultCollector` when no explicit collector is passed
 3. Reports are written via `atexit` handlers (both bridges). `GherkinTestCase` additionally writes from `class func tearDown()` — this ensures reports work under `xcodebuild` where the test runner may be killed before `atexit` fires
 4. `HTMLReportGenerator.write(result:to:)` creates intermediate directories automatically — `build/report.html` works even if `build/` doesn't exist
@@ -349,6 +354,7 @@ PICKLE_REPORT=1 PICKLE_REPORT_PATH=build/report.html swift test
 | `TestRunResult` | Aggregated results with computed counts for features/scenarios/steps |
 | `HTMLReportGenerator` | Generates self-contained HTML with inline CSS/JS |
 | `ReportResultCollector` | Thread-safe accumulator using `OSAllocatedUnfairLock` |
+| `XCTestAssertionError` | Error wrapping XCTAssert failures detected by `GherkinTestCase` (XCTest bridge only) |
 
 ### Enriched Result Types
 
@@ -480,7 +486,7 @@ rm -rf ~/Library/Containers/com.picklekit.example.todoapp.uitests.xctrunner/
 
 - **`TodoStoreTests`** uses Swift Testing (`import Testing`, `@Suite struct`, `@Test func`, `#expect`). Unit tests have no UI dependency and work with Swift Testing.
 - **`TodoAppUITests`** uses XCTest (`import XCTest`, `GherkinTestCase`). Xcode blocks `import Testing` in `bundle.ui-testing` targets via `TESTING_FRAMEWORK_MODULE_ALIAS_FLAGS = -module-alias Testing=_Testing_Unavailable`. This is an Xcode-imposed limitation — UI test bundles cannot use the Swift Testing framework.
-- **Step handler assertions** use `XCTAssertTrue`, `XCTAssertEqual`, `XCTAssertFalse` directly (not `guard/throw`). This works because `StepHandler` is `@MainActor` and XCTest is the active test runtime in the UI test bundle. XCTest assertion failures are recorded on the current `XCTestCase` instance automatically.
+- **Step handler assertions** use `XCTAssertTrue`, `XCTAssertEqual`, `XCTAssertFalse` directly (not `guard/throw`). This works because `StepHandler` is `@MainActor` and XCTest is the active test runtime in the UI test bundle. XCTest assertion failures are recorded on the current `XCTestCase` instance automatically. `GherkinTestCase` detects these non-throwing failures via `testRun.totalFailureCount` and corrects the `ScenarioResult` for accurate HTML reports.
 
 ### Key Patterns
 

@@ -126,7 +126,7 @@ public final class ScenarioRunner: Sendable {
             if let background = background {
                 for step in background.steps {
                     let stepStart = ContinuousClock.now
-                    try await executeStep(step, feature: feature)
+                    try await executeStep(step, feature: feature, scenarioName: scenario.name)
                     let stepDuration = stepStart.duration(to: .now)
                     stepsExecuted += 1
                     stepResults.append(StepResult(
@@ -142,7 +142,7 @@ public final class ScenarioRunner: Sendable {
             // Run scenario steps
             for step in scenario.steps {
                 let stepStart = ContinuousClock.now
-                try await executeStep(step, feature: feature)
+                try await executeStep(step, feature: feature, scenarioName: scenario.name)
                 let stepDuration = stepStart.duration(to: .now)
                 stepsExecuted += 1
                 stepResults.append(StepResult(
@@ -249,7 +249,7 @@ public final class ScenarioRunner: Sendable {
 
     // MARK: - Private
 
-    private func executeStep(_ step: Step, feature: Feature?) async throws {
+    private func executeStep(_ step: Step, feature: Feature?, scenarioName: String?) async throws {
         guard let (handler, match) = try registry.match(step) else {
             throw ScenarioRunnerError.undefinedStep(
                 step: step,
@@ -264,7 +264,7 @@ public final class ScenarioRunner: Sendable {
             throw ScenarioRunnerError.stepFailed(
                 step: step,
                 feature: feature?.name,
-                scenario: nil,
+                scenario: scenarioName,
                 underlyingError: error
             )
         }

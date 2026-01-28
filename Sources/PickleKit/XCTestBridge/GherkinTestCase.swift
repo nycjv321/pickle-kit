@@ -3,6 +3,18 @@ import XCTest
 import ObjectiveC
 import Foundation
 
+/// Error type representing XCTest assertion failures detected during scenario execution.
+/// Used when step handlers call XCTAssert* (which records failures on the test case
+/// but does not throw), causing ScenarioRunner to see the step as passing.
+public struct XCTestAssertionError: Error, LocalizedError {
+    public let message: String
+    public var errorDescription: String? { message }
+
+    public init(message: String) {
+        self.message = message
+    }
+}
+
 /// Base class for Gherkin-driven XCTest suites.
 ///
 /// Subclass this in your test target and override `registerStepDefinitions()`
@@ -365,19 +377,54 @@ open class GherkinTestCase: XCTestCase {
 
         Task { @MainActor in
             do {
+                // Snapshot XCTest failure count before running the scenario.
+                // Step handlers may call XCTAssert* which records failures on the
+                // test case but does NOT throw — ScenarioRunner sees the step as passing.
+                let failureCountBefore = testCase.testRun?.totalFailureCount ?? 0
+
                 let result = try await runner.run(
                     scenario: scenario,
                     background: background,
                     feature: feature
                 )
 
+                // Detect XCTAssert failures that didn't throw
+                let failureCountAfter = testCase.testRun?.totalFailureCount ?? 0
+                let hasNewXCTestFailures = failureCountAfter > failureCountBefore
+
                 if reportingEnabled {
-                    collector.record(
-                        scenarioResult: result,
-                        featureName: feature.name,
-                        featureTags: feature.tags,
-                        sourceFile: feature.sourceFile
-                    )
+                    if result.passed && hasNewXCTestFailures {
+                        // XCTAssert failed but didn't throw — record as failed in the report
+                        let correctedResult = ScenarioResult(
+                            scenarioName: result.scenarioName,
+                            passed: false,
+                            error: ScenarioRunnerError.stepFailed(
+                                step: scenario.steps.first ?? Step(keyword: .then, text: "unknown"),
+                                feature: feature.name,
+                                scenario: scenario.name,
+                                underlyingError: XCTestAssertionError(
+                                    message: "XCTest recorded \(failureCountAfter - failureCountBefore) assertion failure(s) during scenario execution"
+                                )
+                            ),
+                            stepsExecuted: result.stepsExecuted,
+                            tags: result.tags,
+                            stepResults: result.stepResults,
+                            duration: result.duration
+                        )
+                        collector.record(
+                            scenarioResult: correctedResult,
+                            featureName: feature.name,
+                            featureTags: feature.tags,
+                            sourceFile: feature.sourceFile
+                        )
+                    } else {
+                        collector.record(
+                            scenarioResult: result,
+                            featureName: feature.name,
+                            featureTags: feature.tags,
+                            sourceFile: feature.sourceFile
+                        )
+                    }
                 }
 
                 if !result.passed, let error = result.error {

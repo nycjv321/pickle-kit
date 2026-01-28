@@ -193,6 +193,69 @@ struct GherkinTestScenarioTests {
         #expect(testRun.featureResults[0].scenarioResults[0].scenarioName == "Quick check")
     }
 
+    // MARK: - Error Reporting via Collector
+
+    @Test func thrownErrorFlowsToCollector() async throws {
+        // Create a scenario with a step that will fail (no step definitions registered)
+        let scenarios = try loadScenarios(
+            bundle: Bundle.module,
+            subdirectory: "Fixtures",
+            tagFilter: TagFilter(includeTags: ["fast"])
+        )
+        let test = try #require(scenarios.first)
+
+        // Run with no step definitions — all steps are undefined
+        let collector = ReportResultCollector()
+        try await test.run(stepDefinitions: [], reportCollector: collector)
+
+        let testRun = collector.buildTestRunResult()
+        #expect(testRun.totalScenarioCount == 1)
+        #expect(testRun.failedScenarioCount == 1)
+        #expect(testRun.passedScenarioCount == 0)
+
+        let scenarioResult = try #require(testRun.featureResults.first?.scenarioResults.first)
+        #expect(!scenarioResult.passed)
+        #expect(scenarioResult.error != nil)
+
+        // Verify at least one step is undefined
+        let undefinedSteps = scenarioResult.stepResults.filter { $0.status == .undefined }
+        #expect(!undefinedSteps.isEmpty)
+    }
+
+    @Test func thrownStepErrorFlowsToCollector() async throws {
+        // Use ArithmeticSteps with a scenario that has a wrong expected result
+        let scenario = Scenario(
+            name: "Bad arithmetic",
+            steps: [
+                Step(keyword: .given, text: "I have the number 5", sourceLine: 2),
+                Step(keyword: .when, text: "I add 3", sourceLine: 3),
+                Step(keyword: .then, text: "the result should be 99", sourceLine: 4),
+            ]
+        )
+        let feature = Feature(name: "Arithmetic", sourceFile: "arithmetic.feature")
+        let test = GherkinTestScenario(scenario: scenario, background: nil, feature: feature)
+
+        let collector = ReportResultCollector()
+        try await test.run(stepDefinitions: [ArithmeticSteps.self], reportCollector: collector)
+
+        let testRun = collector.buildTestRunResult()
+        #expect(testRun.failedScenarioCount == 1)
+
+        let scenarioResult = try #require(testRun.featureResults.first?.scenarioResults.first)
+        #expect(!scenarioResult.passed)
+        #expect(scenarioResult.stepResults.count == 3)
+        #expect(scenarioResult.stepResults[0].status == .passed)
+        #expect(scenarioResult.stepResults[1].status == .passed)
+        #expect(scenarioResult.stepResults[2].status == .failed)
+
+        // Verify the error message appears in the step result
+        let failedStep = try #require(scenarioResult.stepResults.last)
+        #expect(failedStep.error != nil)
+        // The error comes from StepAssertionError which is wrapped by ScenarioRunnerError.stepFailed.
+        // ScenarioRunner records error.localizedDescription, which includes the underlying error.
+        #expect(failedStep.error?.isEmpty == false)
+    }
+
     // MARK: - Properties
 
     @Test func descriptionReturnsScenarioName() throws {
