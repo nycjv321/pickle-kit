@@ -210,8 +210,8 @@ After merging a release PR:
 **Cause**: Code works locally but fails in CI.
 
 **Solution**:
-- CI runs on `macos-14` — check Xcode version differences
-- Verify Swift version compatibility (5.9+)
+- CI runs on `macos-26` — check Xcode version differences
+- Verify Swift version compatibility (6.2+)
 - Check if tests depend on file system state or environment variables
 - Review xcbeautify output in the CI logs
 

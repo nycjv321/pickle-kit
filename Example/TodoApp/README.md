@@ -5,7 +5,7 @@ A minimal macOS SwiftUI todo app demonstrating PickleKit with XCUITest.
 ## Prerequisites
 
 - macOS 14+
-- Xcode 15+ (with command line tools selected — `xcode-select -p` should show `/Applications/Xcode.app/...`)
+- Xcode 26+ (with command line tools selected — `xcode-select -p` should show `/Applications/Xcode.app/...`)
 - [xcodegen](https://github.com/yonaskolb/XcodeGen)
 - [xcbeautify](https://github.com/cpisciotta/xcbeautify)
 
