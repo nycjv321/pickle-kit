@@ -46,6 +46,7 @@ Sources/PickleKit/
 - **Reflection-based step registration** — `StepDefinitions` protocol uses `Mirror` to auto-discover stored `StepDefinition` properties. `GherkinTestCase.stepDefinitionTypes` enables declaring step providers per subclass. Type-based providers are registered before `registerStepDefinitions()`, so both approaches coexist.
 - **Two test bridges** — `GherkinTestScenario` for Swift Testing (`@Test(arguments:)`), `GherkinTestCase` for XCTest (UI tests, legacy). Both use the same `StepDefinitions` types. `ScenarioDefinition` has `asScenario`/`asOutline` convenience accessors for cleaner pattern matching in tests.
 - **XCTAssert failure detection** — `GherkinTestCase.executeScenario()` snapshots `testRun.totalFailureCount` before running each scenario. If `ScenarioRunner` reports the scenario as passing but XCTest recorded new assertion failures (from `XCTAssert*` calls in step handlers), the result is corrected to `passed: false` before recording to the `ReportResultCollector`. This bridges the gap where XCTAssert failures don't throw and are invisible to `ScenarioRunner`. The `XCTestAssertionError` type wraps the failure count for error reporting.
+- **Skipped scenario tracking** — `ScenarioResult` has a `skipped: Bool` property (default `false`). When tag or name filters exclude a scenario, all three filtering locations (`ScenarioRunner.run(feature:)`, `GherkinTestScenario.buildScenarios()`, `GherkinTestCase.defaultTestSuite`) record a `ScenarioResult(passed: true, skipped: true)` instead of silently omitting it. `FeatureResult.passedCount`/`failedCount`/`allPassed` exclude skipped scenarios; `skippedCount` counts them. The HTML report renders skipped scenarios with a `status-skipped` badge and provides a "Skipped" filter button.
 
 ### Platforms
 
@@ -360,8 +361,8 @@ PICKLE_REPORT=1 PICKLE_REPORT_PATH=build/report.html swift test
 
 `ScenarioResult` and `FeatureResult` have additional fields (all with defaults for backward compatibility):
 
-- **ScenarioResult**: `tags: [String]`, `stepResults: [StepResult]`, `duration: TimeInterval`
-- **FeatureResult**: `tags: [String]`, `sourceFile: String?`, `duration: TimeInterval`, plus computed step counts (`totalStepCount`, `passedStepCount`, `failedStepCount`, `skippedStepCount`, `undefinedStepCount`)
+- **ScenarioResult**: `skipped: Bool` (default `false`), `tags: [String]`, `stepResults: [StepResult]`, `duration: TimeInterval`
+- **FeatureResult**: `tags: [String]`, `sourceFile: String?`, `duration: TimeInterval`, plus computed scenario counts (`passedCount`, `failedCount`, `skippedCount` — skipped excluded from passed/failed), and computed step counts (`totalStepCount`, `passedStepCount`, `failedStepCount`, `skippedStepCount`, `undefinedStepCount`)
 
 ### Programmatic Usage
 

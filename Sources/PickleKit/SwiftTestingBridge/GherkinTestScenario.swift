@@ -202,6 +202,27 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
 
     // MARK: - Private
 
+    /// Record a skipped scenario into the shared report collector when reporting is enabled.
+    private static func recordSkippedIfNeeded(
+        scenario: Scenario,
+        feature: Feature
+    ) {
+        guard reportEnabled else { return }
+        ensureAtexitRegistered()
+        let skippedResult = ScenarioResult(
+            scenarioName: scenario.name,
+            passed: true,
+            skipped: true,
+            tags: scenario.tags
+        )
+        _resultCollector.record(
+            scenarioResult: skippedResult,
+            featureName: feature.name,
+            featureTags: feature.tags,
+            sourceFile: feature.sourceFile
+        )
+    }
+
     private static func buildScenarios(
         from features: [Feature],
         tagFilter: TagFilter?,
@@ -246,12 +267,14 @@ public struct GherkinTestScenario: Sendable, CustomStringConvertible {
                 if let filter = mergedFilter {
                     let allTags = feature.tags + scenario.tags
                     if !filter.shouldInclude(tags: allTags) {
+                        recordSkippedIfNeeded(scenario: scenario, feature: feature)
                         continue
                     }
                 }
 
                 if let nameFilter = mergedNameFilter {
                     if !nameFilter.shouldInclude(name: scenario.name) {
+                        recordSkippedIfNeeded(scenario: scenario, feature: feature)
                         continue
                     }
                 }

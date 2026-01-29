@@ -24,6 +24,7 @@ public enum ScenarioRunnerError: Error, LocalizedError {
 public struct ScenarioResult: Sendable {
     public let scenarioName: String
     public let passed: Bool
+    public let skipped: Bool
     public let error: (any Error)?
     public let stepsExecuted: Int
     public let tags: [String]
@@ -33,6 +34,7 @@ public struct ScenarioResult: Sendable {
     public init(
         scenarioName: String,
         passed: Bool,
+        skipped: Bool = false,
         error: (any Error)? = nil,
         stepsExecuted: Int = 0,
         tags: [String] = [],
@@ -41,6 +43,7 @@ public struct ScenarioResult: Sendable {
     ) {
         self.scenarioName = scenarioName
         self.passed = passed
+        self.skipped = skipped
         self.error = error
         self.stepsExecuted = stepsExecuted
         self.tags = tags
@@ -72,9 +75,10 @@ public struct FeatureResult: Sendable {
         self.duration = duration
     }
 
-    public var passedCount: Int { scenarioResults.filter(\.passed).count }
-    public var failedCount: Int { scenarioResults.filter { !$0.passed }.count }
-    public var allPassed: Bool { scenarioResults.allSatisfy(\.passed) }
+    public var passedCount: Int { scenarioResults.filter { $0.passed && !$0.skipped }.count }
+    public var failedCount: Int { scenarioResults.filter { !$0.passed && !$0.skipped }.count }
+    public var skippedCount: Int { scenarioResults.filter(\.skipped).count }
+    public var allPassed: Bool { scenarioResults.filter { !$0.skipped }.allSatisfy(\.passed) }
 
     public var totalStepCount: Int {
         scenarioResults.reduce(0) { $0 + $1.stepResults.count }
@@ -225,6 +229,12 @@ public final class ScenarioRunner: Sendable {
             if let filter = tagFilter {
                 let allTags = feature.tags + scenario.tags
                 if !filter.shouldInclude(tags: allTags) {
+                    results.append(ScenarioResult(
+                        scenarioName: scenario.name,
+                        passed: true,
+                        skipped: true,
+                        tags: scenario.tags
+                    ))
                     continue
                 }
             }

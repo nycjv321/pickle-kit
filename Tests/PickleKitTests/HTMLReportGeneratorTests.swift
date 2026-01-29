@@ -156,6 +156,13 @@ import Foundation
         #expect(html.contains("class=\"step-row skipped\""))
     }
 
+    @Test func failedScenarioRowHighlightCSS() {
+        let result = makeSampleResult()
+        let html = generator.generate(from: result)
+
+        #expect(html.contains("scenario[data-status=\"failed\"] summary { background:"))
+    }
+
     @Test func failedScenarioIsOpenByDefault() {
         let result = makeSampleResult()
         let html = generator.generate(from: result)
@@ -273,6 +280,93 @@ import Foundation
         #expect(html.contains("Features"))
     }
 
+    // MARK: - Skipped Scenario Status
+
+    @Test func skippedScenarioRendersWithSkippedStatus() {
+        let feature = FeatureResult(
+            featureName: "Filtered Feature",
+            scenarioResults: [
+                ScenarioResult(
+                    scenarioName: "Included Scenario",
+                    passed: true,
+                    stepsExecuted: 1,
+                    stepResults: [
+                        StepResult(keyword: "Given", text: "a step", status: .passed, duration: 0.001, sourceLine: 1)
+                    ],
+                    duration: 0.001
+                ),
+                ScenarioResult(
+                    scenarioName: "Skipped Scenario",
+                    passed: true,
+                    skipped: true,
+                    tags: ["wip"]
+                ),
+            ]
+        )
+
+        let result = TestRunResult(featureResults: [feature], startTime: Date(), endTime: Date())
+        let html = generator.generate(from: result)
+
+        #expect(html.contains("data-status=\"skipped\""))
+        #expect(html.contains("status-badge status-skipped"))
+        #expect(html.contains("Skipped Scenario"))
+    }
+
+    @Test func skippedFilterButtonPresent() {
+        let result = makeSampleResult()
+        let html = generator.generate(from: result)
+
+        #expect(html.contains("filterStatus('skipped')"))
+        #expect(html.contains("data-filter=\"skipped\""))
+    }
+
+    @Test func skippedScenarioSummaryBreakdown() {
+        let feature = FeatureResult(
+            featureName: "Mixed Feature",
+            scenarioResults: [
+                ScenarioResult(scenarioName: "Passing", passed: true, stepsExecuted: 1),
+                ScenarioResult(scenarioName: "Skipped", passed: true, skipped: true),
+            ]
+        )
+
+        let result = TestRunResult(featureResults: [feature], startTime: Date(), endTime: Date())
+        let html = generator.generate(from: result)
+
+        #expect(html.contains("1 passed, 0 failed, 1 skipped"))
+    }
+
+    @Test func allSkippedFeatureGetsSkippedDataStatus() {
+        let feature = FeatureResult(
+            featureName: "All Skipped Feature",
+            scenarioResults: [
+                ScenarioResult(scenarioName: "S1", passed: true, skipped: true),
+                ScenarioResult(scenarioName: "S2", passed: true, skipped: true),
+            ]
+        )
+
+        let result = TestRunResult(featureResults: [feature], startTime: Date(), endTime: Date())
+        let html = generator.generate(from: result)
+
+        #expect(html.contains("data-status=\"skipped\""))
+    }
+
+    @Test func featureStatsShowSkippedCount() {
+        let feature = FeatureResult(
+            featureName: "Partial Feature",
+            scenarioResults: [
+                ScenarioResult(scenarioName: "Passing", passed: true, stepsExecuted: 1),
+                ScenarioResult(scenarioName: "Skipped", passed: true, skipped: true),
+            ]
+        )
+
+        let result = TestRunResult(featureResults: [feature], startTime: Date(), endTime: Date())
+        let html = generator.generate(from: result)
+
+        // Feature stats should show "1/1 scenarios passed, 1 skipped"
+        #expect(html.contains("1/1 scenarios passed"))
+        #expect(html.contains("1 skipped"))
+    }
+
     // MARK: - Undefined Step Status
 
     @Test func undefinedStepCSSClass() {
@@ -386,6 +480,7 @@ import Foundation
         #expect(result.totalScenarioCount == 3)
         #expect(result.passedScenarioCount == 2)
         #expect(result.failedScenarioCount == 1)
+        #expect(result.skippedScenarioCount == 0)
 
         #expect(result.totalStepCount == 6)
         #expect(result.passedStepCount == 4)
@@ -393,5 +488,27 @@ import Foundation
         #expect(result.skippedStepCount == 1)
 
         #expect(abs(result.duration - 5.0) < 0.001)
+    }
+
+    @Test func testRunResultSkippedScenarioAggregation() {
+        let feature = FeatureResult(
+            featureName: "F1",
+            scenarioResults: [
+                ScenarioResult(scenarioName: "S1", passed: true, stepsExecuted: 1),
+                ScenarioResult(scenarioName: "S2", passed: true, skipped: true),
+                ScenarioResult(scenarioName: "S3", passed: false, stepsExecuted: 0),
+            ]
+        )
+
+        let result = TestRunResult(
+            featureResults: [feature],
+            startTime: Date(),
+            endTime: Date()
+        )
+
+        #expect(result.totalScenarioCount == 3)
+        #expect(result.passedScenarioCount == 1)
+        #expect(result.failedScenarioCount == 1)
+        #expect(result.skippedScenarioCount == 1)
     }
 }

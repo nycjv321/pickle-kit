@@ -38,6 +38,10 @@ public struct TestRunResult: Sendable {
         featureResults.reduce(0) { $0 + $1.failedCount }
     }
 
+    public var skippedScenarioCount: Int {
+        featureResults.reduce(0) { $0 + $1.skippedCount }
+    }
+
     // MARK: - Step Aggregations
 
     public var totalStepCount: Int {

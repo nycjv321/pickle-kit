@@ -204,8 +204,13 @@ private final class TestBox<T>: @unchecked Sendable {
         let filter = TagFilter(includeTags: ["smoke"])
         let result = try await runner.run(feature: feature, tagFilter: filter)
 
-        #expect(result.scenarioResults.count == 1)
+        #expect(result.scenarioResults.count == 2)
+        #expect(result.passedCount == 1)
+        #expect(result.skippedCount == 1)
         #expect(result.scenarioResults[0].scenarioName == "Included")
+        #expect(!result.scenarioResults[0].skipped)
+        #expect(result.scenarioResults[1].scenarioName == "Excluded")
+        #expect(result.scenarioResults[1].skipped)
     }
 
     // MARK: - Scenario Name in Result

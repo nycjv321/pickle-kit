@@ -330,6 +330,135 @@ struct ReportIntegrationTests {
         #expect(testRun.totalScenarioCount == 3)
     }
 
+    // MARK: - Skipped Scenarios in Reports
+
+    @Test func skippedScenarioRenderedInReport() async throws {
+        let registry = StepRegistry()
+        registry.given("a passing step") { _ in }
+
+        let passingScenario = Scenario(
+            name: "Included scenario",
+            steps: [
+                Step(keyword: .given, text: "a passing step", sourceLine: 2),
+            ]
+        )
+
+        let feature = Feature(
+            name: "Feature with Skipped",
+            tags: ["smoke"],
+            sourceFile: "skipped.feature"
+        )
+
+        let runner = ScenarioRunner(registry: registry)
+        let passResult = try await runner.run(scenario: passingScenario, feature: feature)
+
+        let skippedResult = ScenarioResult(
+            scenarioName: "Filtered out scenario",
+            passed: true,
+            skipped: true,
+            tags: ["wip"]
+        )
+
+        let collector = ReportResultCollector()
+        collector.record(
+            scenarioResult: passResult,
+            featureName: feature.name,
+            featureTags: feature.tags,
+            sourceFile: feature.sourceFile
+        )
+        collector.record(
+            scenarioResult: skippedResult,
+            featureName: feature.name,
+            featureTags: feature.tags,
+            sourceFile: feature.sourceFile
+        )
+
+        let testRun = collector.buildTestRunResult()
+        #expect(testRun.totalScenarioCount == 2)
+        #expect(testRun.passedScenarioCount == 1)
+        #expect(testRun.failedScenarioCount == 0)
+        #expect(testRun.skippedScenarioCount == 1)
+
+        let html = HTMLReportGenerator().generate(from: testRun)
+        #expect(html.contains("Included scenario"))
+        #expect(html.contains("Filtered out scenario"))
+        #expect(html.contains("status-skipped"))
+    }
+
+    @Test func featureResultSkippedCount() {
+        let feature = FeatureResult(
+            featureName: "Mixed Feature",
+            scenarioResults: [
+                ScenarioResult(scenarioName: "Passing", passed: true, stepsExecuted: 1),
+                ScenarioResult(scenarioName: "Failing", passed: false, stepsExecuted: 0),
+                ScenarioResult(scenarioName: "Skipped", passed: true, skipped: true),
+            ]
+        )
+
+        #expect(feature.passedCount == 1)
+        #expect(feature.failedCount == 1)
+        #expect(feature.skippedCount == 1)
+        #expect(!feature.allPassed) // Failed scenario means not all passed
+    }
+
+    @Test func skippedScenariosExcludedFromPassedFailed() {
+        let feature = FeatureResult(
+            featureName: "Only Skipped",
+            scenarioResults: [
+                ScenarioResult(scenarioName: "S1", passed: true, skipped: true),
+                ScenarioResult(scenarioName: "S2", passed: true, skipped: true),
+            ]
+        )
+
+        #expect(feature.passedCount == 0)
+        #expect(feature.failedCount == 0)
+        #expect(feature.skippedCount == 2)
+        #expect(feature.allPassed) // No non-skipped scenarios means allPassed is true
+    }
+
+    @Test func scenarioRunnerRecordsSkippedForTagFilter() async throws {
+        let registry = StepRegistry()
+        registry.given("a step") { _ in }
+        registry.when("another step") { _ in }
+        registry.then("a result") { _ in }
+
+        let feature = Feature(
+            name: "Tag Filter Feature",
+            tags: [],
+            scenarios: [
+                .scenario(Scenario(
+                    name: "Included",
+                    tags: ["fast"],
+                    steps: [
+                        Step(keyword: .given, text: "a step", sourceLine: 2),
+                    ]
+                )),
+                .scenario(Scenario(
+                    name: "Excluded",
+                    tags: ["wip"],
+                    steps: [
+                        Step(keyword: .given, text: "another step", sourceLine: 5),
+                    ]
+                )),
+            ],
+            sourceFile: "tagfilter.feature"
+        )
+
+        let runner = ScenarioRunner(registry: registry)
+        let filter = TagFilter(excludeTags: ["wip"])
+        let result = try await runner.run(feature: feature, tagFilter: filter)
+
+        #expect(result.scenarioResults.count == 2)
+        #expect(result.passedCount == 1)
+        #expect(result.skippedCount == 1)
+        #expect(result.failedCount == 0)
+        #expect(result.allPassed)
+
+        let skipped = result.scenarioResults.first(where: \.skipped)
+        #expect(skipped?.scenarioName == "Excluded")
+        #expect(skipped?.tags == ["wip"])
+    }
+
     // MARK: - Report File Write Round-Trip
 
     @Test func reportWritesToFile() async throws {

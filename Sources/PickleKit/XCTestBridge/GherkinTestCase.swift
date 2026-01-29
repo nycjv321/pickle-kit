@@ -157,6 +157,27 @@ open class GherkinTestCase: XCTestCase {
         }
     }
 
+    /// Record a skipped scenario into the shared report collector when reporting is enabled.
+    private static func recordSkippedIfNeeded(
+        scenario: Scenario,
+        feature: Feature
+    ) {
+        guard reportEnabled else { return }
+        ensureAtexitRegistered()
+        let skippedResult = ScenarioResult(
+            scenarioName: scenario.name,
+            passed: true,
+            skipped: true,
+            tags: scenario.tags
+        )
+        _resultCollector.record(
+            scenarioResult: skippedResult,
+            featureName: feature.name,
+            featureTags: feature.tags,
+            sourceFile: feature.sourceFile
+        )
+    }
+
     /// Write an incremental report after each test class finishes.
     /// This ensures reports are generated even when the test runner process
     /// is terminated (e.g., by xcodebuild) before `atexit` handlers fire.
@@ -245,6 +266,7 @@ open class GherkinTestCase: XCTestCase {
                 if let filter = filter {
                     let allTags = feature.tags + scenario.tags
                     if !filter.shouldInclude(tags: allTags) {
+                        recordSkippedIfNeeded(scenario: scenario, feature: feature)
                         continue
                     }
                 }
@@ -252,6 +274,7 @@ open class GherkinTestCase: XCTestCase {
                 // Apply name filter
                 if let nameFilter = nameFilter {
                     if !nameFilter.shouldInclude(name: scenario.name) {
+                        recordSkippedIfNeeded(scenario: scenario, feature: feature)
                         continue
                     }
                 }
