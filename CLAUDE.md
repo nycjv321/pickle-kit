@@ -77,7 +77,7 @@ macOS 14+, iOS 17+, tvOS 17+, watchOS 10+
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md) for test design philosophy, the BDD rationale, testing trophy guidance, and UI test best practices.
+See [docs/TESTING.md](docs/TESTING.md) for test design philosophy, the BDD rationale, testing trophy guidance, and UI test best practices. See [docs/BDD_GUIDE.md](docs/BDD_GUIDE.md) for conventions on writing feature files, step definitions, and runners. See [docs/SETUP.md](docs/SETUP.md) for adopting these conventions in other projects.
 
 ```bash
 # PickleKit library tests

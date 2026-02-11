@@ -8,6 +8,13 @@
 
 A standalone Swift Cucumber/BDD testing framework with zero external dependencies. Parse Gherkin `.feature` files, register step definitions with regex patterns, and run scenarios — integrated with both Swift Testing and XCTest.
 
+## Requirements
+
+- Swift 6.2+
+- macOS 14+ / iOS 17+ / tvOS 17+ / watchOS 10+
+- Swift Testing bridge (`GherkinTestScenario`) works on all platforms with Swift Testing support
+- XCTest bridge (`GherkinTestCase`) requires ObjC runtime (Apple platforms)
+
 ## Installation
 
 Add PickleKit to your `Package.swift`:
@@ -177,56 +184,6 @@ The report includes summary counts, per-feature sections with collapsible scenar
 
 See [Report Configuration](docs/REPORTING.md) for customization, xcodebuild integration, and programmatic generation.
 
-## Architecture
-
-```
-Sources/PickleKit/
-├── AST/                    # Feature, Scenario, Step, DataTable model types
-├── Parser/                 # GherkinParser (state machine), OutlineExpander
-├── Report/                 # HTML report generation (StepResult, HTMLReportGenerator, ReportResultCollector)
-├── Runner/                 # StepRegistry, StepDefinitions, ScenarioRunner, TagFilter
-├── SwiftTestingBridge/     # GherkinTestScenario (Swift Testing integration)
-└── XCTestBridge/           # GherkinTestCase (XCTest integration)
-```
-
-All types are `Sendable`. Step handlers are `@MainActor async throws`.
-
-## Requirements
-
-- Swift 6.2+
-- macOS 14+ / iOS 17+ / tvOS 17+ / watchOS 10+
-- Swift Testing bridge (`GherkinTestScenario`) works on all platforms with Swift Testing support
-- XCTest bridge (`GherkinTestCase`) requires ObjC runtime (Apple platforms)
-
-## Testing
-
-PickleKit follows the testing trophy model: invest most in integration tests, use unit tests for pure logic, and use Gherkin-driven E2E tests for critical user flows.
-
-```bash
-swift test                           # Run all PickleKit tests
-swift test --filter ParserTests      # Run a specific test suite
-PICKLE_REPORT=1 swift test           # Run tests + generate HTML report
-```
-
-See [Testing Guide](docs/TESTING.md) for test design philosophy, BDD rationale, and UI test best practices.
-
-## Continuous Integration
-
-PickleKit has a fully functioning CI pipeline via GitHub Actions that runs on every push and pull request. The pipeline has three jobs:
-
-```
-unit-tests ──┬──> ui-tests
-             └──> build
-```
-
-Unit tests gate both the UI test and release build jobs, which run in parallel. See [Testing Guide](docs/TESTING.md) for CI configuration details and [Release Process](docs/RELEASE.md) for the automated release pipeline.
-
-## AI-Assisted Development
-
-PickleKit's Gherkin scenarios work as automated feedback loops improving the quality of the SDLC. This works especially well with AI coding agents. Write the spec in natural language, let the agent implement, run tests, and feed failures back — the same red-green-refactor cycle, with the agent doing the implementation. PickleKit itself was built this way with [Claude Code](https://claude.ai/claude-code).
-
-See [AI-Assisted Development](docs/AI-DEVELOPMENT.md) for the workflow, lessons learned, and practical advice.
-
 ## Example: TodoApp with XCUITest
 
 The [`Example/TodoApp`](Example/TodoApp) directory contains a complete macOS SwiftUI todo app that demonstrates PickleKit with XCUITest.
@@ -243,6 +200,28 @@ It includes:
 - **xcodegen** project spec (`project.yml`) — run `xcodegen generate` to create the Xcode project
 
 See [`Example/TodoApp/README.md`](Example/TodoApp/README.md) for setup and usage.
+
+## Setup
+
+To adopt PickleKit's BDD conventions in your project — including configuration for AI-assisted development with Claude Code — see the [Setup Guide](docs/SETUP.md).
+
+## AI-Assisted Development
+
+PickleKit's Gherkin scenarios work as automated feedback loops improving the quality of the SDLC. This works especially well with AI coding agents. Write the spec in natural language, let the agent implement, run tests, and feed failures back — the same red-green-refactor cycle, with the agent doing the implementation. PickleKit itself was built this way with [Claude Code](https://claude.ai/claude-code).
+
+See [AI-Assisted Development](docs/AI-DEVELOPMENT.md) for the workflow, lessons learned, and practical advice.
+
+## Documentation
+
+| Document | Content |
+|----------|---------|
+| [Gherkin Reference](docs/GHERKIN.md) | Syntax, step registration, tag filtering, programmatic usage |
+| [BDD Conventions Guide](docs/BDD_GUIDE.md) | Feature file, step definition, and runner conventions |
+| [Setup Guide](docs/SETUP.md) | Adopting BDD conventions in your project, Claude Code configuration |
+| [Testing Guide](docs/TESTING.md) | Test design philosophy, BDD rationale, UI test best practices, CI |
+| [Report Configuration](docs/REPORTING.md) | HTML report customization, xcodebuild integration |
+| [AI-Assisted Development](docs/AI-DEVELOPMENT.md) | BDD feedback loop for AI coding agents |
+| [Release Process](docs/RELEASE.md) | Conventional commits, CI/CD pipeline, automated releases |
 
 ## License
 
