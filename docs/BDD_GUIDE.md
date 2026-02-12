@@ -12,7 +12,33 @@ How to design and write Gherkin feature files.
 
 ### Step Design
 
-Steps should describe **business outcomes**, not verification mechanics. When a step needs to vary its behavior by context (format, configuration, input type), push that logic into the step implementation rather than splitting into multiple steps in the feature file.
+Each step in the feature file should represent a single **business concept**. Implementation details — intermediate objects, verification mechanics, multi-step procedures — belong in the step definition, not the feature file. When a step needs to vary its behavior by context (format, configuration, input type), push that logic into the step implementation rather than splitting into multiple steps.
+
+#### Given steps — describe *what state exists*, not *how it's constructed*
+
+Consolidate setup plumbing (creating intermediate objects, wiring relationships) into a single step that declares the precondition at the business level.
+
+| Approach | Feature file | Step implementation |
+|----------|-------------|---------------------|
+| **Prefer** | `Given album "X" by "Y" in the source` | Step creates artist, album, and song internally |
+| **Avoid** | 3 separate Given steps for artist, album, and song | Each step creates one object |
+
+**Guideline:** If a Given step exists only to set up an intermediate object that another Given step depends on, consolidate them. The feature file declares *what precondition exists*; the step definition handles the construction.
+
+#### When steps — describe *what action the user takes*, not *the implementation steps*
+
+Consolidate multi-step operations into a single step that captures the user intent.
+
+| Approach | Feature file | Step implementation |
+|----------|-------------|---------------------|
+| **Prefer** | `When I convert the album to ALAC` | Step selects songs, configures encoding, runs conversion |
+| **Avoid** | 3 separate When steps for select, configure, execute | Each step does one sub-operation |
+
+**Guideline:** If a When step is always preceded by the same other When steps, consolidate them. The feature file describes *what the user does*; the step definition handles the procedure.
+
+#### Then steps — describe *what the outcome is*, not *how to verify it*
+
+Consolidate verification details into a single step that asserts the business result.
 
 | Approach | Feature file | Step implementation |
 |----------|-------------|---------------------|
@@ -21,10 +47,11 @@ Steps should describe **business outcomes**, not verification mechanics. When a 
 
 **Guideline:** If a Then step could be named "the X is done" and the substeps are just verification details, consolidate into one step. The feature file describes *what* the outcome is; the step definition decides *how* to verify it.
 
-**Examples:**
-- `the cover art is set` — internally verifies art exists AND bytes match the original
-- `the data is saved` — internally checks each field the format supports
-- `the output is unchanged` — internally verifies properties are preserved
+**Examples across all step types:**
+- `Given album "X" by "Y" in the source` — internally creates artist, album, and default song
+- `When I convert the album to ALAC` — internally selects songs, configures settings, runs conversion
+- `Then the cover art is set` — internally verifies art exists AND bytes match the original
+- `Then the metadata is updated` — internally checks the fields the format supports
 
 ### Conventions
 
