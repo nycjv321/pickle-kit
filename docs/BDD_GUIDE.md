@@ -2,6 +2,8 @@
 
 Conventions for writing Gherkin feature files and PickleKit step definitions in Swift projects. These patterns are reusable across any project using PickleKit with the `GherkinTestScenario` (Swift Testing) bridge.
 
+> **Note:** Downstream projects (e.g., Armonica) copy this guide into their own docs with project-specific examples. When updating conventions here, also update the copies.
+
 For Gherkin syntax reference, see [GHERKIN.md](GHERKIN.md). For test design philosophy, see [TESTING.md](TESTING.md). For AI-assisted development workflows, see [AI-DEVELOPMENT.md](AI-DEVELOPMENT.md).
 
 ---
@@ -52,6 +54,20 @@ Consolidate verification details into a single step that asserts the business re
 - `When I convert the album to ALAC` — internally selects songs, configures settings, runs conversion
 - `Then the cover art is set` — internally verifies art exists AND bytes match the original
 - `Then the metadata is updated` — internally checks the fields the format supports
+
+### Scenario Titles
+
+Titles describe the **user-observable outcome**, not the system mechanism:
+
+- Use user-domain language: "library", "Trash" — not "database", "record"
+- Describe what the user observes, not how the system implements it
+- For cascade behavior, focus on the highest-level effect
+
+| Avoid (system-level) | Prefer (user-observable) |
+|---|---|
+| Removes it from the database | Hidden from the library |
+| Deletes the record | Moved to Trash |
+| Removes the artist record | Hides the artist |
 
 ### Conventions
 

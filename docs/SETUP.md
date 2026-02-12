@@ -8,21 +8,70 @@ For the conventions themselves, see [BDD_GUIDE.md](BDD_GUIDE.md). For the AI dev
 
 ## 1. Add conventions as a Claude Code rule
 
-Create `.claude/rules/bdd-conventions.md` in your project root. Copy the content from the [Features](BDD_GUIDE.md#features) and [Steps](BDD_GUIDE.md#steps) sections of the BDD Conventions Guide. Claude Code auto-loads all `.claude/rules/*.md` files — no explicit reference needed in `CLAUDE.md`.
+Create `.claude/rules/bdd-conventions.md` in your project root. Copy [BDD_GUIDE.md](BDD_GUIDE.md) in its entirety — the Features and Steps sections contain the conventions Claude Code needs when writing feature files and step definitions. Claude Code auto-loads all `.claude/rules/*.md` files — no explicit reference needed in `CLAUDE.md`.
 
 ## 2. Create project-specific BDD documentation
 
-Your project's own BDD documentation (e.g., `docs/testing/BDD.md`) should cover what's specific to your project:
+Create a BDD document in your project (e.g., `docs/testing/BDD.md`) covering what's specific to your project. Use this template as a starting point:
 
-- **Test suite inventory** — which suites exist, scenario counts, what each covers
-- **Running commands** — `swift test --filter ...` for each suite
-- **Directory structure** — where features and steps live in your project
-- **Domain-to-target mapping** — which test target covers which service area
-- **Fixture locations** — where test fixtures live and how they're managed
-- **Testing boundaries** — what's tested here vs. in dependencies (if applicable)
-- **UI BDD specifics** — URL schemes, page objects, accessibility identifiers (if applicable)
+````markdown
+# BDD Testing
+
+<!-- Brief description of how your project uses PickleKit. -->
+
+## Test Suites
+
+<!-- List each BDD suite, its test target, scenario count, and what it covers. -->
+
+| Suite | Target | Scenarios | Coverage |
+|-------|--------|-----------|----------|
+| `MyFeatureBDDTests` | MyFeatureTests | N | Brief description of what scenarios validate |
+
+## Running
+
+```bash
+# Run a specific BDD suite
+swift test --filter MyFeatureBDDTests
+
+# Run all tests in a target
+swift test --filter MyFeatureTests
+```
+
+## Structure
+
+<!-- Show where feature files and step definitions live in your project. -->
+
+```
+Features/
+├── domain/
+│   └── my_feature.feature
+
+Tests/MyFeatureTests/
+├── Steps/
+│   ├── MyFeatureTestContext.swift
+│   ├── MyFeatureSetupSteps.swift
+│   ├── MyFeatureActionSteps.swift
+│   └── MyFeatureVerificationSteps.swift
+└── MyFeatureBDDTests.swift
+```
+
+<!-- Optional sections — include if relevant to your project. -->
+
+<!-- ## Domain Mapping -->
+<!-- Which test target covers which service area. -->
+
+<!-- ## Fixtures -->
+<!-- Where test fixtures live and how they're managed. -->
+
+<!-- ## Testing Boundaries -->
+<!-- What's tested here vs. in dependencies. -->
+````
+
+Remove the HTML comments and optional sections that don't apply once you've filled it in.
 
 ## 3. Reference project documentation in CLAUDE.md
+
+Add your project-specific BDD document to your `CLAUDE.md` documentation references:
 
 ```markdown
 ## Documentation References
