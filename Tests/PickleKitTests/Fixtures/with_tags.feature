@@ -1,5 +1,6 @@
 @smoke
 Feature: Tagged scenarios
+  Verifies feature-level and scenario-level tags are parsed correctly.
 
   @fast
   Scenario: Quick check

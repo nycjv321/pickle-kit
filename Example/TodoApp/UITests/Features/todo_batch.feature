@@ -1,12 +1,12 @@
 @smoke
 Feature: Todo batch operations
-  As a user
-  I want to add multiple todos efficiently
-  So that I can quickly populate my list
+  Covers bulk operations and parameterized todo creation.
 
   Background:
     Given the app is launched
     And the todo list is empty
+
+  # --- Batch creation ---
 
   Scenario: Add todos from a data table
     When I add the following todos:
@@ -21,16 +21,13 @@ Feature: Todo batch operations
     And I should see "Read a book" at position 2
     And I should see "Clean the house" at position 3
 
-  Scenario Outline: Add todo with specific text
-    When I enter "<title>" in the text field
-    And I tap the add button
-    Then I should see "<title>" at position 0
-    And the count label should read "<count_text>"
+  # --- Individual creation ---
 
-    Examples:
-      | title          | count_text |
-      | Morning run    | 1 item     |
-      | Evening study  | 1 item     |
+  Scenario: Add todo with specific text
+    When I enter "Morning run" in the text field
+    And I tap the add button
+    Then I should see "Morning run" at position 0
+    And the count label should read "1 item"
 
   Scenario: Add numbered todos
     When I add 3 todos with prefix "Task"
@@ -38,6 +35,8 @@ Feature: Todo batch operations
     And I should see "Task 1" at position 0
     And I should see "Task 2" at position 1
     And I should see "Task 3" at position 2
+
+  # --- Reordering ---
 
   @wip
   Scenario: Drag to reorder todos

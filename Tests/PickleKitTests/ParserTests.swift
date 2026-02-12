@@ -20,8 +20,7 @@ struct ParserTests {
     @Test func parseFeatureDescription() throws {
         let feature = try loadFixture("basic")
 
-        #expect(feature.description.contains("As a user"))
-        #expect(feature.description.contains("I want to perform basic math"))
+        #expect(feature.description.contains("Verifies basic arithmetic operations produce correct results."))
     }
 
     @Test func parseScenarioNames() throws {

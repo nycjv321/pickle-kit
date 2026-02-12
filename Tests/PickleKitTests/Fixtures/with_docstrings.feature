@@ -1,4 +1,5 @@
 Feature: Doc strings
+  Verifies doc string blocks are parsed and attached to steps.
 
   Scenario: API response
     Given the API returns:

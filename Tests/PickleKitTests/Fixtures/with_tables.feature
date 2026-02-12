@@ -1,4 +1,5 @@
 Feature: Data tables
+  Verifies data tables are parsed and passed to step definitions.
 
   Scenario: User list
     Given the following users exist:

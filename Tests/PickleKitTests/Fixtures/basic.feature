@@ -1,7 +1,5 @@
 Feature: Basic arithmetic
-  As a user
-  I want to perform basic math
-  So that I can verify calculations
+  Verifies basic arithmetic operations produce correct results.
 
   Scenario: Addition
     Given I have the number 5

@@ -1,4 +1,6 @@
 Feature: Shopping cart
+  Verifies shopping cart operations share a common setup state.
+
   Background:
     Given I have an empty cart
     And I am logged in as "testuser"

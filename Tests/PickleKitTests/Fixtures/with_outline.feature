@@ -1,4 +1,5 @@
 Feature: Outline examples
+  Verifies outline expansion substitutes example values into step templates.
 
   Scenario Outline: Eating fruits
     Given I have <start> fruits
