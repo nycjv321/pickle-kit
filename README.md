@@ -225,4 +225,4 @@ See [AI-Assisted Development](docs/AI-DEVELOPMENT.md) for the workflow, lessons 
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE) for details.
